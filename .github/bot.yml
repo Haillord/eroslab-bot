@@ -1,0 +1,76 @@
+name: ErosLab Bot
+
+on:
+  schedule:
+    # Запуск по часам прайм-тайма (UTC, Москва = UTC+3)
+    # 08:00 MSK = 05:00 UTC
+    - cron: '0 5 * * *'
+    # 10:00 MSK = 07:00 UTC
+    - cron: '0 7 * * *'
+    # 12:00 MSK = 09:00 UTC
+    - cron: '0 9 * * *'
+    # 14:00 MSK = 11:00 UTC
+    - cron: '0 11 * * *'
+    # 16:00 MSK = 13:00 UTC
+    - cron: '0 13 * * *'
+    # 18:00 MSK = 15:00 UTC
+    - cron: '0 15 * * *'
+    # 19:00 MSK = 16:00 UTC
+    - cron: '0 16 * * *'
+    # 20:00 MSK = 17:00 UTC
+    - cron: '0 17 * * *'
+    # 21:00 MSK = 18:00 UTC
+    - cron: '0 18 * * *'
+    # 22:00 MSK = 19:00 UTC
+    - cron: '0 19 * * *'
+    # 23:00 MSK = 20:00 UTC
+    - cron: '0 20 * * *'
+
+  # Ручной запуск для теста
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Скачиваем историю постов из GitHub Actions Cache
+      - name: Restore posted history
+        uses: actions/cache@v4
+        with:
+          path: |
+            posted_ids.json
+            posted_hashes.json
+            stats.json
+          key: bot-history-${{ github.run_number }}
+          restore-keys: |
+            bot-history-
+
+      - name: Run bot (one post)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          ADMIN_USER_ID: ${{ secrets.ADMIN_USER_ID }}
+          CIVITAI_API_KEY: ${{ secrets.CIVITAI_API_KEY }}
+        run: python civitai_bot.py
+
+      # Сохраняем историю обратно в кэш
+      - name: Save posted history
+        uses: actions/cache@v4
+        if: always()
+        with:
+          path: |
+            posted_ids.json
+            posted_hashes.json
+            stats.json
+          key: bot-history-${{ github.run_number }}
