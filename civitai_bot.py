@@ -1,5 +1,5 @@
 """
-ErosLab Bot — Только CivitAI
+ErosLab Bot — Только CivitAI (MIN_LIKES = 10)
 """
 
 import asyncio
@@ -22,10 +22,10 @@ TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "@eroslabai")
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 
 WATERMARK_TEXT      = "@eroslabai"
-MIN_LIKES           = 30
+MIN_LIKES           = 10          # ← изменено на 10
 MIN_WIDTH           = 512
 MIN_HEIGHT          = 512
-FETCH_LIMIT         = 80          # можно чуть меньше, чем было
+FETCH_LIMIT         = 80
 
 HISTORY_FILE = "posted_ids.json"
 HASHES_FILE  = "posted_hashes.json"
@@ -82,7 +82,7 @@ def has_blacklisted(tags):
 
 def download(url):
     try:
-        headers = {"User-Agent": "ErosLabBot/1.0 (+https://github.com/yourname/eroslab-bot)"}
+        headers = {"User-Agent": "ErosLabBot/1.0 (+https://github.com/Haillord/eroslab-bot)"}
         r = requests.get(url, timeout=60, headers=headers)
         r.raise_for_status()
         return r.content
@@ -145,9 +145,9 @@ def build_caption(item):
 def fetch_civitai():
     params = {
         "limit": FETCH_LIMIT,
-        "nsfw": "X",                                   # можно сделать "Mature" или True
+        "nsfw": "Mature",                    # ← более мягкий фильтр (больше результатов)
         "sort": random.choice(["Most Reactions", "Most Comments", "Newest"]),
-        "period": random.choice(["Day", "Week", "Month", "AllTime"]),
+        "period": random.choice(["AllTime", "Month", "Week", "Day"]),
     }
 
     try:
@@ -160,9 +160,11 @@ def fetch_civitai():
         result = []
         for item in data.get("items", []):
             stats = item.get("stats", {})
-            likes = stats.get("likeCount", 0) + stats.get("heartCount", 0) + stats.get("thumbsUpCount", 0)
+            likes = (stats.get("likeCount", 0) + 
+                     stats.get("heartCount", 0) + 
+                     stats.get("thumbsUpCount", 0))
 
-            if likes < MIN_LIKES:
+            if likes < MIN_LIKES:          # теперь 10
                 continue
 
             tags = clean_tags(_civitai_tags(item))
@@ -172,7 +174,7 @@ def fetch_civitai():
             result.append({
                 "id": f"civitai_{item['id']}",
                 "url": item.get("url", ""),
-                "tags": tags[:15],           # можно чуть больше
+                "tags": tags[:15],
                 "likes": likes,
                 "source": "CivitAI"
             })
@@ -185,12 +187,10 @@ def fetch_civitai():
         return []
 
 def _civitai_tags(item):
-    # Приоритет: теги из API
     raw = item.get("tags", [])
     if raw:
         return [t.get("name", "") if isinstance(t, dict) else str(t) for t in raw]
 
-    # Запасной вариант — парсим prompt
     prompt = (item.get("meta") or {}).get("prompt", "")
     if prompt:
         parts = re.split(r"[,|]", prompt)
