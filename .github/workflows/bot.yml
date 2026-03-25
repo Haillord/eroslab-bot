@@ -2,40 +2,56 @@ name: ErosLab Bot
 
 on:
   schedule:
-    - cron: '0 5,7,9,11,13,15,16,17,18,19,20 * * *'
-  workflow_dispatch:
+    # Оптимизированный график: каждые 2-3 часа в активное время
+    - cron: '0 */2 * * *'  # Каждые 3 часа
+    # Или если хочешь чаще:
+    # - cron: '0 5,8,11,14,17,20,23 * * *'  # В 5,8,11,14,17,20,23 часов
+  workflow_dispatch:  # Ручной запуск
 
 jobs:
   post:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Разрешаем боту пушить обновленную базу данных
+      contents: write  # Нужно для пуша обновлений
     
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 1  # Только последний коммит, быстрее
+          
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
+          cache: 'pip'  # Кэшируем зависимости для скорости
+          
       - name: Install dependencies
         run: |
+          pip install --upgrade pip
           pip install requests Pillow python-telegram-bot
-
-      - name: Run bot
+          
+      - name: Run ErosLab Bot
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           CIVITAI_API_KEY: ${{ secrets.CIVITAI_API_KEY }}
         run: python civitai_bot.py
-
-      - name: Save History to Repo
-        if: always()
+        
+      - name: Commit and push updates
+        if: always()  # Всегда пытаемся сохранить историю, даже если были ошибки
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Добавляем файлы с историей
           git add posted_ids.json posted_hashes.json stats.json || true
-          git commit -m "Update posted history [skip ci]" || echo "No changes to commit"
-          git push || echo "No changes to push"
+          
+          # Коммитим только если есть изменения
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update posted history [skip ci]"
+            git push
+            echo "History updated successfully"
+          fi
