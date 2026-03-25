@@ -144,8 +144,8 @@ def build_caption(item):
 # ==================== ТОЛЬКО CIVITAI ====================
 def fetch_civitai():
     params = {
-        "limit": FETCH_LIMIT,
-        "nsfw": "Mature",                    # Mature даёт хороший баланс NSFW
+        "limit": 100,
+        "nsfw": "X",                    # Mature даёт хороший баланс NSFW
         "sort": random.choice(["Most Reactions", "Most Comments", "Newest"]),
         "period": random.choice(["AllTime", "Month", "Week", "Day"]),
     }
