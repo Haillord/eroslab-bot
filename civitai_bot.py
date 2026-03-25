@@ -23,7 +23,7 @@ TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "@eroslabai")
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 
 WATERMARK_TEXT      = "@eroslabai"
-MIN_LIKES           = 5  # Немного поднял планку качества
+MIN_LIKES           = 1  # Немного поднял планку качества
 MIN_WIDTH           = 512
 MIN_HEIGHT          = 512
 
@@ -147,7 +147,7 @@ def fetch_civitai():
         "nsfw": "X",
         "sort": random.choice(sorts),
         "period": random.choice(periods),
-        "page": random.randint(1, 10) # Смотрим до 1000-го поста
+        "page": random.randint(1, 5) # Смотрим до 1000-го поста
     }
 
     try:
