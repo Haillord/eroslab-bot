@@ -35,7 +35,7 @@ STATS_FILE   = "stats.json"
 BLACKLIST_TAGS = {
     "gore", "guro", "scat", "vore", "snuff", "necrophilia",
     "bestiality", "zoo", "loli", "shota", "child", "minor",
-    "underage", "infant", "toddler"
+    "underage", "infant", "toddler, 1boy,"
 }
 
 # Стоп-слова для хэштегов
