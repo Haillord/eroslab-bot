@@ -1,5 +1,5 @@
 """
-Генератор описаний: Groq (основной) → Pollinations (запасной) → fallback фраза
+Генератор описаний: Groq (основной) → Pollinations (запасной) → fallback (только теги)
 """
 
 import requests
@@ -173,7 +173,7 @@ def _try_pollinations(prompt):
 
 
 def generate_caption(tags, rating, likes):
-    """Генерирует описание: Groq → Pollinations → fallback фраза"""
+    """Генерирует описание: Groq → Pollinations → fallback (только теги)"""
 
     if not tags:
         return fallback_caption(tags)
@@ -191,32 +191,15 @@ def generate_caption(tags, rating, likes):
         logger.info("Groq failed, trying Pollinations...")
         text = _try_pollinations(prompt)
 
-    # 3. Если оба не сработали — fallback фраза
+    # 3. Если оба не сработали — fallback (только теги)
     if not text:
-        logger.info("All AI failed, using fallback phrase")
+        logger.info("All AI failed, using fallback (tags only)")
         return fallback_caption(tags)
 
     return _format_caption(text, tags)
 
 
 def fallback_caption(tags):
-    """Запасной вариант на случай ошибки AI"""
+    """Запасной вариант — только теги и водяной знак"""
     tags_line = " ".join(f"#{t}" for t in tags[:8]) if tags else ""
-
-    phrases = [
-        "🔥 Горячий кадр для твоей ленты",
-        "💖 Нежный образ с оттенком игривости",
-        "🍑 Образ, который заставляет улыбнуться",
-        "✨ Эстетика и соблазн в одном кадре",
-        "💋 Когда искусство встречается с откровенностью",
-        "🌟 Настроение поднимает этот пост",
-        "🎀 Соблазнительный образ для настоящих ценителей",
-        "🖤 Тот самый контент, ради которого ты здесь",
-        "🌸 Откровенно и красиво — как ты любишь",
-    ]
-
-    return (
-        f"{random.choice(phrases)}\n\n"
-        f"{tags_line}\n\n"
-        f"📢 @eroslabai"
-    )
+    return f"{tags_line}\n\n📢 @eroslabai"
