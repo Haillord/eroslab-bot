@@ -16,6 +16,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import telegram
 from telegram import Bot
+from caption_generator import generate_caption
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
