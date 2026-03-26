@@ -41,6 +41,25 @@ PROMPT_TEMPLATES = [
     ),
 ]
 
+def trim_to_sentence(text, max_len=300):
+    """
+    Обрезает текст до max_len, но так, чтобы он заканчивался на .!?
+    Если в пределах max_len нет знака препинания, обрезает по последнему пробелу.
+    """
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    # Ищем последний знак препинания (.!?) в пределах обрезанной строки
+    last_punct = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
+    if last_punct > max_len * 0.7:  # если знак препинания найден и он не слишком близко к началу
+        return truncated[:last_punct+1]
+    # Иначе обрезаем по последнему пробелу, чтобы не было обрывка слова
+    last_space = truncated.rfind(' ')
+    if last_space > max_len * 0.7:
+        return truncated[:last_space] + '...'
+    # Если ничего не подошло, просто обрезаем с многоточием
+    return truncated + '...'
+
 def _safe_tags(tags):
     """Убирает NSFW-теги — используется и для промпта, и для хэштегов."""
     return [t for t in tags if t.lower() not in NSFW_TRIGGER_TAGS]
@@ -61,7 +80,6 @@ def _build_prompt(tags):
     return random.choice(PROMPT_TEMPLATES).format(tags=tags_str)
 
 def _format_caption(ai_text, tags, footer):
-    # FIX: фильтруем NSFW-теги и из хэштегов, а не только из промпта
     safe_tags = _safe_tags(tags)
     hashtags = " ".join(f"#{t}" for t in safe_tags[:8]) if safe_tags else ""
     return f"{ai_text}\n\n{hashtags}\n\n{footer}"
@@ -78,7 +96,7 @@ def _try_groq(prompt):
             data=json.dumps({
                 "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 70,
+                "max_tokens": 120,   # увеличено для более полных ответов
                 "temperature": 0.9
             }),
             timeout=15
@@ -87,8 +105,7 @@ def _try_groq(prompt):
             data = response.json()
             text = data["choices"][0]["message"]["content"].strip()
             if _is_valid_response(text):
-                if len(text) > 200:
-                    text = text[:200] + "..."
+                text = trim_to_sentence(text, max_len=300)  # обрезаем до целого предложения
                 logger.info("✅ Groq caption generated")
                 return text
             else:
@@ -106,8 +123,7 @@ def _try_pollinations(prompt):
         if response.status_code == 200:
             text = response.text.strip()
             if _is_valid_response(text):
-                if len(text) > 250:
-                    text = text[:250] + "..."
+                text = trim_to_sentence(text, max_len=300)  # обрезаем до целого предложения
                 logger.info("✅ Pollinations GET caption generated")
                 return text
             else:
@@ -127,8 +143,7 @@ def _try_pollinations(prompt):
         if response.status_code == 200:
             text = response.text.strip()
             if _is_valid_response(text):
-                if len(text) > 250:
-                    text = text[:250] + "..."
+                text = trim_to_sentence(text, max_len=300)  # обрезаем до целого предложения
                 logger.info("✅ Pollinations POST caption generated")
                 return text
             else:
