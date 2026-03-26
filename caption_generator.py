@@ -46,7 +46,11 @@ def _safe_tags(tags):
     return [t for t in tags if t.lower() not in NSFW_TRIGGER_TAGS]
 
 def _is_valid_response(text):
-    bad_phrases = ["I'm sorry", "I can't", "I cannot", "<!DOCTYPE", "<html", "As an AI"]
+    bad_phrases = [
+        "I'm sorry", "I can't", "I cannot", "<!DOCTYPE", "<html", "As an AI",
+        "Не могу выполнить этот запрос", "Извините, я не могу", "Я не могу",
+        "не могу выполнить", "не могу ответить", "не могу сгенерировать"
+    ]
     return bool(text) and len(text) > 5 and not any(p in text for p in bad_phrases)
 
 def _build_prompt(tags):
