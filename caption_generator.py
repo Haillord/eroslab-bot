@@ -148,15 +148,9 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      watermark="📢 @eroslabai", suggestion="💬 Предложка: @Haillord"):
     footer = f"{watermark}\n{suggestion}"
 
+    # Если нет тегов — не генерируем текст, только хэштеги и футер
     if not tags:
-        prompt = "Коротко, сухо, одно предложение. Просто настроение. Без эмодзи."
-        text = _try_groq(prompt)
-        if not text:
-            text = _try_pollinations(prompt)
-        if text:
-            return f"{text}\n\n{footer}"
-        else:
-            return fallback_caption(tags, footer)
+        return fallback_caption(tags, footer)
 
     prompt = _build_prompt(tags)
     if not prompt:
