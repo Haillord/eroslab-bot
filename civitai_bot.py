@@ -10,6 +10,8 @@ import logging
 import os
 import random
 import re
+import subprocess
+import tempfile
 import time
 import requests
 from io import BytesIO
@@ -151,6 +153,30 @@ def add_watermark(data, text):
     except Exception as e:
         logger.error(f"Watermark Error: {e}")
         return data
+
+def get_video_duration(data: bytes) -> float:
+    """
+    Возвращает длительность видео в секундах.
+    Если не удалось определить — возвращает 0.0.
+    """
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        cmd = [
+            'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1', tmp_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        duration = float(result.stdout.strip())
+        return duration
+    except Exception as e:
+        logger.error(f"Error getting video duration: {e}")
+        return 0.0
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 # ==================== ТЕГИ ====================
 def extract_tags(item):
@@ -368,12 +394,22 @@ async def main():
             save_all()
             continue
 
+        # Проверка изображения или видео
         if not item["url"].lower().endswith((".mp4", ".webm", ".gif")):
             if not check_media_size(data, item["url"]):
                 logger.warning("Image size too small, skipping")
                 posted_ids.add(item["id"])
                 save_all()
                 continue
+        else:
+            # Для видео проверяем длительность, чтобы отсеять битые/статичные файлы
+            duration = get_video_duration(data)
+            if duration < 0.5:
+                logger.warning(f"Video too short ({duration:.2f}s), skipping")
+                posted_ids.add(item["id"])
+                save_all()
+                continue
+            logger.info(f"Video duration: {duration:.2f}s")
 
         img_hash = hashlib.md5(data).hexdigest()
         if img_hash in posted_hashes:
