@@ -284,6 +284,7 @@ def fetch_civitai():
             )
 
             erotic_items = []
+            _debug_logged = False  # логируем структуру только одного item
             for item in items:
                 try:
                     nsfw_level = item.get("nsfwLevel")
@@ -296,6 +297,16 @@ def fetch_civitai():
 
                     if not is_x_rating:
                         continue
+
+                    # DEBUG: один раз показываем сырую структуру item чтобы понять где теги
+                    if not _debug_logged:
+                        debug_keys = list(item.keys())
+                        debug_tags = item.get("tags", "KEY_MISSING")
+                        debug_meta_keys = list(item.get("meta", {}).keys()) if item.get("meta") else "NO_META"
+                        logger.info(f"🔍 DEBUG item keys: {debug_keys}")
+                        logger.info(f"🔍 DEBUG tags field: {debug_tags}")
+                        logger.info(f"🔍 DEBUG meta keys: {debug_meta_keys}")
+                        _debug_logged = True
 
                     tags = extract_tags(item)
 
