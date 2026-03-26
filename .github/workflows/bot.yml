@@ -2,74 +2,35 @@ name: ErosLab Bot
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 10,12,14,16,18,20,22 * * *'
   workflow_dispatch:
 
 jobs:
   post:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          token: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          # cache: 'pip'   # отключено, чтобы не искать requirements.txt
-          
-      - name: Install dependencies
-        run: |
+
+      - run: |
           pip install --upgrade pip
-          pip install requests Pillow python-telegram-bot feedparser
-          
-      - name: Run ErosLab Bot (CivitAI)
+          pip install requests Pillow python-telegram-bot
+
+      - run: python civitai_bot.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           CIVITAI_API_KEY: ${{ secrets.CIVITAI_API_KEY }}
-          POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python civitai_bot.py
-        
-      - name: Commit and push updates (with retry)
-        if: always()
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Подтягиваем последние изменения (избегаем конфликтов)
-          git pull --rebase --no-edit || true
-          
-          # Добавляем файлы истории (reddit_posted.json уже не используется)
-          git add posted_ids.json posted_hashes.json stats.json 2>/dev/null || true
-          
-          # Проверяем, есть ли изменения
-          if git diff --cached --quiet; then
-            echo "📝 No changes to commit"
-            exit 0
-          fi
-          
-          # Коммитим
-          git commit -m "📊 Update posted history [skip ci]"
-          
-          # Пытаемся запушить с тремя попытками
-          for i in {1..3}; do
-            echo "🔄 Push attempt $i of 3"
-            if git push; then
-              echo "✅ Successfully pushed on attempt $i"
-              exit 0
-            else
-              echo "⚠️ Push failed, retrying..."
-              sleep 5
-            fi
-          done
-          
-          echo "❌ Failed to push after 3 attempts"
-          exit 1
+
+      - run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@users.noreply.github.com"
+          git pull --rebase || true
+          git add posted_ids.json posted_hashes.json stats.json || true
+          git commit -m "update stats" || true
+          git push || true
