@@ -159,12 +159,12 @@ def add_watermark(data, text):
 
 # ==================== CIVITAI API ====================
 def fetch_civitai():
-    """Запрос к API CivitAI - только NSFW контент"""
+    """Запрос к API CivitAI - только X и XXX рейтинг"""
     
     variations = [
-        {"limit": 100, "sort": "Most Reactions", "period": "Day"},
-        {"limit": 100, "sort": "Most Reactions", "period": "Week"},
-        {"limit": 100, "sort": "Newest", "period": "Day"},
+        {"limit": 100, "nsfw": "X", "sort": "Most Reactions", "period": "Day"},
+        {"limit": 100, "nsfw": "X", "sort": "Most Reactions", "period": "Week"},
+        {"limit": 100, "nsfw": "X", "sort": "Newest", "period": "Day"},
     ]
     
     for params in variations:
@@ -175,43 +175,38 @@ def fetch_civitai():
             data = r.json()
             items = data.get("items", [])
             
-            logger.info(f"Got {len(items)} items (sort={params['sort']}, period={params['period']})")
+            logger.info(f"Got {len(items)} items (nsfw={params['nsfw']}, sort={params['sort']}, period={params['period']})")
             
-            adult_items = []
+            erotic_items = []
             for item in items:
                 try:
                     nsfw_level = item.get("nsfwLevel")
                     
-                    # Проверяем рейтинг - берём Soft, Mature, X, XXX
-                    is_adult = False
-                    if isinstance(nsfw_level, str):
-                        if nsfw_level.upper() in ["SOFT", "MATURE", "X", "XXX"]:
-                            is_adult = True
-                    elif isinstance(nsfw_level, (int, float)):
-                        if nsfw_level >= 2:
-                            is_adult = True
+                    # Проверяем рейтинг - берем только X и XXX
+                    is_x_rating = False
+                    if isinstance(nsfw_level, str) and nsfw_level.upper() in ["X", "XXX"]:
+                        is_x_rating = True
+                    elif isinstance(nsfw_level, (int, float)) and nsfw_level >= 4:
+                        is_x_rating = True
                     
-                    if not is_adult:
+                    if not is_x_rating:
                         continue
                     
-                    # Получаем теги из промпта (просто берём всё)
+                    # Получаем теги из промпта
                     meta = item.get("meta", {})
                     prompt = meta.get("prompt", "") if meta else ""
                     
                     raw_tags = []
                     if prompt:
-                        # Разбиваем промпт на теги (по запятым)
                         for tag in prompt.split(","):
                             tag = tag.strip()
-                            # Убираем лишние символы
                             tag = re.sub(r'[\(\)\[\]\{\}]', '', tag)
                             if tag and len(tag) > 2:
                                 raw_tags.append(tag)
                     
-                    # Очищаем теги (убираем стоп-слова и т.д.)
                     tags = clean_tags(raw_tags)
                     
-                    # Проверка на реально запрещённый контент
+                    # Проверка на запрещённый контент
                     if has_blacklisted(tags):
                         continue
                     
@@ -224,7 +219,7 @@ def fetch_civitai():
                     if likes < MIN_LIKES:
                         continue
                     
-                    adult_items.append({
+                    erotic_items.append({
                         "id": f"civitai_{item['id']}",
                         "url": item.get("url", ""),
                         "tags": tags[:15],
@@ -238,9 +233,9 @@ def fetch_civitai():
                     logger.error(f"Error processing item {item.get('id')}: {e}")
                     continue
             
-            if adult_items:
-                logger.info(f"Found {len(adult_items)} NSFW posts")
-                return adult_items
+            if erotic_items:
+                logger.info(f"Found {len(erotic_items)} X/XXX rated posts")
+                return erotic_items
                 
         except Exception as e:
             logger.error(f"Error with params {params}: {e}")
