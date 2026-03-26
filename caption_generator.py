@@ -18,10 +18,29 @@ NSFW_TRIGGER_TAGS = {
     "spread_legs", "pussy_juice", "uncensored", "censored", "genitals"
 }
 
+# Шаблоны промптов — чередуем для разнообразия
+PROMPT_TEMPLATES = [
+    (
+        "Ты автор горячего телеграм-канала. Напиши одно короткое соблазнительное "
+        "предложение на русском языке для поста с аниме-артом. "
+        "Не описывай внешность буквально. Передай настроение, желание, атмосферу. "
+        "Вдохновение: {tags}. Добавь 1-2 эмодзи. Только текст, без кавычек."
+    ),
+    (
+        "Придумай одну короткую дерзкую подпись на русском для аниме-поста в телеграме. "
+        "Стиль: игривый, соблазнительный, с характером. "
+        "Атмосфера: {tags}. Добавь эмодзи. Только текст ответа."
+    ),
+    (
+        "Напиши одно предложение на русском — короткое, чувственное, с интригой. "
+        "Как будто описываешь момент, от которого перехватывает дыхание. "
+        "Настроение задают слова: {tags}. Добавь эмодзи. Без кавычек."
+    ),
+]
+
 def generate_caption(tags, rating, likes):
     """Генерирует описание через Pollinations.ai"""
 
-    # Если нет тегов, сразу fallback
     if not tags:
         return fallback_caption(tags, rating, likes)
 
@@ -33,15 +52,10 @@ def generate_caption(tags, rating, likes):
         return fallback_caption(tags, rating, likes)
 
     tags_str = ", ".join(safe_tags[:8])
+    template = random.choice(PROMPT_TEMPLATES)
+    prompt = template.format(tags=tags_str)
 
-    prompt = (
-        f"Напиши короткое соблазнительное описание для поста на русском языке. "
-        f"Стиль и настроение: {tags_str}. "
-        f"Требования: 1 предложение максимум, добавь эмодзи, "
-        f"разговорный стиль, без кавычек, только текст ответа."
-    )
-
-    # Метод 1: GET-запрос (самый стабильный у Pollinations)
+    # Метод 1: GET-запрос
     try:
         encoded = urllib.parse.quote(prompt)
         response = requests.get(
@@ -52,29 +66,20 @@ def generate_caption(tags, rating, likes):
         if response.status_code == 200:
             ai_text = response.text.strip()
 
-            if (
-                ai_text
-                and "<!DOCTYPE" not in ai_text
-                and "<html" not in ai_text
-                and "I'm sorry" not in ai_text
-                and "I can't" not in ai_text
-                and "I cannot" not in ai_text
-                and len(ai_text) > 5
-            ):
+            if _is_valid_response(ai_text):
                 if len(ai_text) > 250:
                     ai_text = ai_text[:250] + "..."
-
                 logger.info("AI caption generated successfully (GET)")
                 return _format_caption(ai_text, tags, rating, likes)
             else:
-                logger.warning(f"AI refused or returned bad response: {ai_text[:80]}")
+                logger.warning(f"AI refused: {ai_text[:80]}")
 
     except requests.exceptions.Timeout:
         logger.warning("GET timeout, trying POST...")
     except Exception as e:
         logger.warning(f"GET failed: {e}, trying POST...")
 
-    # Метод 2: POST с messages (OpenAI-совместимый формат)
+    # Метод 2: POST
     try:
         response = requests.post(
             "https://text.pollinations.ai/",
@@ -90,22 +95,13 @@ def generate_caption(tags, rating, likes):
         if response.status_code == 200:
             ai_text = response.text.strip()
 
-            if (
-                ai_text
-                and "<!DOCTYPE" not in ai_text
-                and "<html" not in ai_text
-                and "I'm sorry" not in ai_text
-                and "I can't" not in ai_text
-                and "I cannot" not in ai_text
-                and len(ai_text) > 5
-            ):
+            if _is_valid_response(ai_text):
                 if len(ai_text) > 250:
                     ai_text = ai_text[:250] + "..."
-
                 logger.info("AI caption generated successfully (POST)")
                 return _format_caption(ai_text, tags, rating, likes)
             else:
-                logger.warning(f"AI refused or returned bad response: {ai_text[:80]}")
+                logger.warning(f"AI refused: {ai_text[:80]}")
 
     except requests.exceptions.Timeout:
         logger.warning("POST timeout, using fallback")
@@ -115,19 +111,25 @@ def generate_caption(tags, rating, likes):
     return fallback_caption(tags, rating, likes)
 
 
+def _is_valid_response(text):
+    """Проверяет что AI не отказал и вернул нормальный текст"""
+    bad_phrases = ["I'm sorry", "I can't", "I cannot", "<!DOCTYPE", "<html"]
+    return (
+        text
+        and len(text) > 5
+        and not any(p in text for p in bad_phrases)
+    )
+
+
 def _format_caption(ai_text, tags, rating, likes):
-    """Форматирует финальный текст поста"""
     hashtags = " ".join(f"#{t}" for t in tags[:8])
     return (
         f"{ai_text}\n\n"
-        f"⭐ **Рейтинг:** {rating} | ❤️ **Лайков:** {likes}\n\n"
         f"{hashtags}\n\n"
         f"📢 @eroslabai"
     )
 
-
 def fallback_caption(tags, rating, likes):
-    """Запасной вариант на случай ошибки AI"""
     tags_line = " ".join(f"#{t}" for t in tags[:8]) if tags else ""
 
     phrases = [
@@ -144,7 +146,6 @@ def fallback_caption(tags, rating, likes):
 
     return (
         f"{random.choice(phrases)}\n\n"
-        f"⭐ **Рейтинг:** {rating} | ❤️ **Лайков:** {likes}\n\n"
         f"{tags_line}\n\n"
         f"📢 @eroslabai"
     )
