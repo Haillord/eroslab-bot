@@ -178,8 +178,30 @@ def get_video_duration(data: bytes) -> float:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
+# ==================== RETRY ДЛЯ TELEGRAM ====================
+async def send_with_retry(func, *args, retries=3, **kwargs):
+    """
+    Обёртка для отправки в Telegram с повторными попытками.
+    При сбое ждёт 2, 4, 6 секунд перед следующей попыткой.
+    """
+    for attempt in range(retries):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            wait = 2 * (attempt + 1)
+            logger.warning(f"Telegram send failed (attempt {attempt + 1}/{retries}): {e}. Retrying in {wait}s...")
+            await asyncio.sleep(wait)
+
 # ==================== ТЕГИ ====================
 def extract_tags(item):
+    """
+    Берём только официальные теги CivitAI — они чистые, короткие,
+    релевантные и уже отсортированы по важности (самые значимые первые).
+    meta.prompt намеренно исключён: он содержит куски предложений,
+    которые ломают хэштеги и дают AI бессмысленный контекст.
+    """
     raw_tags = []
 
     civitai_tags = item.get("tags", [])
@@ -192,15 +214,8 @@ def extract_tags(item):
             if name:
                 raw_tags.append(name)
         logger.debug(f"CivitAI tags found: {len(raw_tags)}")
-
-    meta = item.get("meta", {})
-    prompt = meta.get("prompt", "") if meta else ""
-    if prompt:
-        for tag in prompt.split(","):
-            tag = tag.strip()
-            tag = re.sub(r'[\(\)\[\]\{\}]', '', tag)
-            if tag and len(tag) > 2:
-                raw_tags.append(tag)
+    else:
+        logger.debug("No CivitAI tags for this item")
 
     return clean_tags(raw_tags)
 
@@ -411,7 +426,8 @@ async def main():
                 continue
             logger.info(f"Video duration: {duration:.2f}s")
 
-        img_hash = hashlib.md5(data).hexdigest()
+        # SHA256 вместо MD5 — надёжнее, меньше коллизий
+        img_hash = hashlib.sha256(data).hexdigest()
         if img_hash in posted_hashes:
             logger.warning("Duplicate content detected")
             posted_ids.add(item["id"])
@@ -442,7 +458,8 @@ async def main():
         url_lower = item["url"].lower()
         if url_lower.endswith((".mp4", ".webm", ".gif")):
             logger.info("Sending as video/gif")
-            await bot.send_video(
+            await send_with_retry(
+                bot.send_video,
                 chat_id=TELEGRAM_CHANNEL_ID,
                 video=BytesIO(data),
                 caption=caption,
@@ -453,7 +470,8 @@ async def main():
         else:
             logger.info("Sending as image with watermark")
             final_data = add_watermark(data, WATERMARK_TEXT)
-            await bot.send_photo(
+            await send_with_retry(
+                bot.send_photo,
                 chat_id=TELEGRAM_CHANNEL_ID,
                 photo=BytesIO(final_data),
                 caption=caption,
