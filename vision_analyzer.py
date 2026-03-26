@@ -16,7 +16,7 @@ class VisionAnalyzer:
     def __init__(self, api_key):
         self.api_key = api_key
         self.api_url = "https://api.groq.com/openai/v1/chat/completions"
-        self.model = "llava-v1.5-7b-4096-preview"  # Бесплатная vision-модель
+        self.model = "llama-3.2-11b-vision-preview"  # Бесплатная vision-модель
         
     def analyze(self, image_data, language="ru"):
         """
