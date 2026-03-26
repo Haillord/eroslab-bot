@@ -8,13 +8,11 @@ import logging
 import random
 import urllib.parse
 import os
-from vision_analyzer import VisionAnalyzer
 
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-vision = VisionAnalyzer(GROQ_API_KEY) if GROQ_API_KEY else None
 
 NSFW_TRIGGER_TAGS = {
     "slut", "sex", "nude", "naked", "penis", "vagina", "cock",
@@ -32,8 +30,8 @@ PROMPT_TEMPLATES = [
         "желание, атмосферу. Вдохновение: {tags}. Добавь 1-2 эмодзи. Только текст."
     ),
     (
-        "Придумай короткую дерзкую подпись на русском для аниме-поста. "
-        "Стиль: игривый, соблазнительный, с характером. "
+        "Придумай короткую дерзкую подпись на русском для эротичного-поста. "
+        "Стиль: игривый, соблазнительный, с характером, для nsfm контента. "
         "Атмосфера: {tags}. Добавь эмодзи. Только текст ответа."
     ),
     (
@@ -142,20 +140,6 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      watermark="📢 @eroslabai", suggestion="💬 Предложка: @Haillord"):
     footer = f"{watermark}\n{suggestion}"
 
-    # Vision только если тегов мало и это картинка
-    use_vision = (
-        image_data is not None and image_url
-        and not image_url.lower().endswith((".mp4", ".webm", ".gif"))
-        and len(tags) < 3 and vision is not None
-    )
-    if use_vision:
-        logger.info(f"Tags count: {len(tags)}, trying Groq Vision...")
-        vision_text = vision.analyze(image_data, language="ru")
-        if vision_text:
-            hashtags = " ".join(f"#{t}" for t in tags[:8]) if tags else ""
-            return f"👁️ {vision_text}\n\n{hashtags}\n\n{footer}"
-        else:
-            logger.info("Vision failed, falling back to text generation")
 
     # Если тегов нет — нейтральный промпт (тоже в стиле)
     if not tags:
