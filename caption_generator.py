@@ -189,6 +189,7 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None):
         image_data is not None 
         and image_url 
         and not image_url.lower().endswith((".mp4", ".webm", ".gif"))
+        and len(tags) < 3
         and vision is not None
     )
     
