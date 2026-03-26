@@ -1,4 +1,4 @@
-﻿﻿"""
+﻿"""
 ErosLab Bot — CivitAI (только X и XXX рейтинг)
 Оптимизирован для GitHub Actions с защитой от повторов.
 """
