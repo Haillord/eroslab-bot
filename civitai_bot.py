@@ -216,27 +216,45 @@ def extract_tags(item):
 
     return clean_tags(raw_tags)
 
-def fetch_tags_by_post_id(post_id: int, headers: dict) -> list:
+def fetch_tags_by_post_id(post_id: int, headers: dict, image_id: str = None) -> list:
     """
-    Запрашиваем теги через postId — только для одного выбранного поста.
-    Вызывается лениво (lazy), уже после fetch_and_pick(), чтобы не
-    делать лишние запросы для всех кандидатов.
+    Сначала пробуем получить теги через postId.
+    Если 404 — fallback на endpoint изображения по image_id.
     """
-    if not post_id:
-        return []
-    try:
-        r = _request_with_backoff(
-            f"https://civitai.com/api/v1/posts/{post_id}",
-            params={},
-            headers=headers
-        )
-        if r:
-            data = r.json()
-            tags = data.get("tags", [])
-            logger.info(f"Fetched {len(tags)} tags from post {post_id}")
-            return tags
-    except Exception as e:
-        logger.warning(f"Could not fetch tags for post {post_id}: {e}")
+    # Вариант 1: через пост
+    if post_id:
+        try:
+            r = _request_with_backoff(
+                f"https://civitai.com/api/v1/posts/{post_id}",
+                params={},
+                headers=headers
+            )
+            if r:
+                tags = r.json().get("tags", [])
+                if tags:
+                    logger.info(f"Fetched {len(tags)} tags from post {post_id}")
+                    return tags
+        except Exception as e:
+            logger.warning(f"Post tags fetch failed ({post_id}): {e}")
+
+    # Вариант 2: через image id
+    if image_id:
+        # image_id хранится как "civitai_125396362" — берём только число
+        raw_id = str(image_id).replace("civitai_", "")
+        try:
+            r = _request_with_backoff(
+                f"https://civitai.com/api/v1/images/{raw_id}",
+                params={},
+                headers=headers
+            )
+            if r:
+                tags = r.json().get("tags", [])
+                if tags:
+                    logger.info(f"Fetched {len(tags)} tags from image {raw_id}")
+                    return tags
+        except Exception as e:
+            logger.warning(f"Image tags fetch failed ({raw_id}): {e}")
+
     return []
 
 # ==================== CIVITAI API ====================
@@ -420,7 +438,7 @@ async def main():
         # Один запрос на весь запуск — никакого лишнего трафика.
         if not item["tags"] and item.get("post_id"):
             headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
-            raw = fetch_tags_by_post_id(item["post_id"], headers)
+            raw = fetch_tags_by_post_id(item["post_id"], headers, image_id=item["id"])
             fetched_tags = clean_tags([
                 t.get("name", t) if isinstance(t, dict) else str(t)
                 for t in raw
