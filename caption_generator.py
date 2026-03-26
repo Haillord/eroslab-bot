@@ -175,11 +175,33 @@ def _try_pollinations(prompt):
 
 
 def generate_caption(tags, rating, likes):
-    """Генерирует описание: Groq → Pollinations → fallback (только теги)"""
+    """Генерирует описание: 
+       - если есть теги → Groq/Pollinations с тегами
+       - если нет тегов → нейтральное/атмосферное описание (тоже через AI)
+    """
 
+    # Если тегов нет — используем нейтральный промпт
     if not tags:
-        return fallback_caption(tags)
+        prompt = (
+            "Напиши одно короткое атмосферное предложение на русском языке "
+            "для поста с красивым изображением. Никаких тегов, просто настроение. "
+            "Добавь 1-2 эмодзи. Без кавычек."
+        )
+        
+        # Пробуем Groq → Pollinations
+        text = _try_groq(prompt)
+        if not text:
+            text = _try_pollinations(prompt)
+        
+        if text:
+            # Если AI сработал — возвращаем описание + теги (пусто) + водяной знак
+            hashtags = ""  # тегов нет
+            return f"{text}\n\n{hashtags}\n\n📢 @eroslabai"
+        else:
+            # Если AI не сработал — fallback без описания
+            return fallback_caption(tags)
 
+    # Если теги есть — используем текущую логику
     prompt = _build_prompt(tags)
     if not prompt:
         logger.info("No safe tags for AI, using fallback")
@@ -193,9 +215,9 @@ def generate_caption(tags, rating, likes):
         logger.info("Groq failed, trying Pollinations...")
         text = _try_pollinations(prompt)
 
-    # 3. Если оба не сработали — fallback (только теги)
+    # 3. Если оба не сработали — fallback
     if not text:
-        logger.info("All AI failed, using fallback (tags only)")
+        logger.info("All AI failed, using fallback")
         return fallback_caption(tags)
 
     return _format_caption(text, tags)
