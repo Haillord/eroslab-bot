@@ -316,6 +316,7 @@ async def main():
                 chat_id=TELEGRAM_CHANNEL_ID,
                 video=BytesIO(data),
                 caption=caption,
+                supports_streaming=True,
                 write_timeout=60,
                 read_timeout=60
             )
