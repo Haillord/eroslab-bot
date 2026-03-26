@@ -79,7 +79,7 @@ def _try_groq(prompt):
                 "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 70,
-                "temperature": 0.6
+                "temperature": 0.9
             }),
             timeout=15
         )
