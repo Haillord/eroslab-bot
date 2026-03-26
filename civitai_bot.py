@@ -272,42 +272,64 @@ async def main():
     logger.info(f"Min image size: {MIN_IMAGE_SIZE}x{MIN_IMAGE_SIZE}")
     logger.info("=" * 50)
     
-    item = fetch_and_pick()
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+    MAX_ATTEMPTS = 10  # Максимум попыток, чтобы не зациклиться
     
-    if not item:
-        logger.info("Nothing new to post")
+    # Пытаемся найти подходящий пост
+    for attempt in range(MAX_ATTEMPTS):
+        item = fetch_and_pick()
+        
+        if not item:
+            logger.info("No more fresh posts available")
+            return
+        
+        # Скачивание
+        try:
+            logger.info(f"Downloading: {item['url']}")
+            r = requests.get(item["url"], timeout=60)
+            r.raise_for_status()
+            data = r.content
+            logger.info(f"Downloaded {len(data)} bytes")
+        except Exception as e:
+            logger.error(f"Download Error: {e}")
+            posted_ids.add(item["id"])  # Помечаем битую ссылку
+            save_all()
+            continue  # Пробуем следующий пост
+        
+        # Проверка размера файла (общая для всех)
+        if len(data) > MAX_FILE_SIZE:
+            logger.warning(f"File too large ({len(data)} bytes > 50MB), skipping")
+            posted_ids.add(item["id"])
+            save_all()
+            continue  # Пробуем следующий пост
+        
+        # Проверка размера изображения (только для картинок)
+        if not item["url"].lower().endswith((".mp4", ".webm", ".gif")):
+            if not check_media_size(data, item["url"]):
+                logger.warning("Image size too small, skipping")
+                posted_ids.add(item["id"])
+                save_all()
+                continue  # Пробуем следующий пост
+        
+        # Проверка на дубликат по хэшу
+        img_hash = hashlib.md5(data).hexdigest()
+        if img_hash in posted_hashes:
+            logger.warning(f"Duplicate content detected")
+            posted_ids.add(item["id"])
+            save_all()
+            continue  # Пробуем следующий пост
+        
+        # Если дошли сюда — пост подходит, выходим из цикла
+        break
+    else:
+        # Сработает, если ни один пост не подошёл за MAX_ATTEMPTS попыток
+        logger.error(f"No suitable post found after {MAX_ATTEMPTS} attempts")
         return
-
-    # Скачивание
-    try:
-        logger.info(f"Downloading: {item['url']}")
-        r = requests.get(item["url"], timeout=60)
-        r.raise_for_status()
-        data = r.content
-        logger.info(f"Downloaded {len(data)} bytes")
-    except Exception as e:
-        logger.error(f"Download Error: {e}")
-        return
-
-    # Проверка размера (теперь поддерживает и видео)
-    if not check_media_size(data, item["url"]):
-        logger.warning("Media size too small, skipping")
-        posted_ids.add(item["id"])  # Помечаем как просмотренное
-        save_all()
-        return
-
-    # Проверка на дубликат
-    img_hash = hashlib.md5(data).hexdigest()
-    if img_hash in posted_hashes:
-        logger.warning(f"Duplicate content detected")
-        posted_ids.add(item["id"])
-        save_all()
-        return
-
-    # Отправка в Telegram
+    
+    # ========== ОТПРАВКА В TELEGRAM ==========
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     caption = " ".join(f"#{t}" for t in item["tags"]) + f"\n\n📢 {WATERMARK_TEXT}"
-
+    
     try:
         url_lower = item["url"].lower()
         if url_lower.endswith((".mp4", ".webm", ".gif")):
@@ -330,7 +352,7 @@ async def main():
                 write_timeout=60,
                 read_timeout=60
             )
-
+        
         # Сохраняем историю
         posted_ids.add(item["id"])
         posted_hashes.add(img_hash)
@@ -342,9 +364,6 @@ async def main():
         save_all()
         logger.info(f"✅ Successfully posted: {item['id']}")
         logger.info(f"📊 Total posts: {stats['total_posts']}")
-
+    
     except Exception as e:
         logger.error(f"Telegram Send Error: {e}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
