@@ -1,5 +1,5 @@
 {
-  "total_posts": 35,
+  "total_posts": 36,
   "sources": {},
   "top_tags": {
     "nsfw": 1,
@@ -39,9 +39,9 @@
     "nervous": 1,
     "grin": 1,
     "newest": 1,
-    "absurdres": 3,
+    "absurdres": 4,
     "highres": 2,
-    "ultra_detailed": 2,
+    "ultra_detailed": 3,
     "m15510n4ry": 1,
     "amazing_quality": 2,
     "1boy": 1,
@@ -49,6 +49,9 @@
     "homare": 1,
     "dutch_angle": 1,
     "night": 1,
-    "various": 1
+    "various": 1,
+    "hdr": 1,
+    "very_aesthetic": 1,
+    "best_illustration": 1
   }
 }
