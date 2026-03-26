@@ -1,6 +1,6 @@
 """
-ErosLab Caption Generator v3 (FINAL)
-Персона + вариативность + вовлечение + стабильность
+Генератор описаний: Groq → Pollinations → fallback
+Стиль: коротко, сухо, с думерским сарказмом, без лишнего.
 """
 
 import requests
@@ -13,23 +13,6 @@ logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-# ==================== ПЕРСОНА ====================
-PERSONA_LINES = [
-    "Ты дерзкая, уверенная и слегка токсичная девушка.",
-    "Ты говоришь так, будто уже всё видела и тебе скучно.",
-    "Ты не просишь — ты провоцируешь.",
-    "Ты играешь с вниманием, а не выпрашиваешь его.",
-]
-
-FORMAT_TYPES = ["single", "double", "dialog"]
-
-ENGAGEMENT_LINES = [
-    "И что дальше? 😈",
-    "Оценка? 1–10",
-    "Ты бы остановился?",
-    "Продолжение хочешь?",
-    "Слабовато или норм?",
-]
 
 NSFW_TRIGGER_TAGS = {
     "slut", "sex", "nude", "naked", "penis", "vagina", "cock",
@@ -39,92 +22,96 @@ NSFW_TRIGGER_TAGS = {
     "spread_legs", "pussy_juice", "uncensored", "censored", "genitals"
 }
 
-# ==================== UTILS ====================
+PROMPT_TEMPLATES = [
+    (
+        "Напиши одно короткое, развратное предложение на русском языке для поста "
+        "с откровенным аниме-артом. Не описывай внешность буквально. Передай похоть, "
+        "желание, атмосферу. Вдохновение: {tags}. Добавь 2-3 эмодзи, подходящих по смыслу. "
+        "Только текст."
+    ),
+    (
+        "Придумай короткую, дерзкую, пошлую подпись на русском для эротичного NSFW-поста. "
+        "Стиль: игривый, провокационный, с характером. Атмосфера: {tags}. "
+        "Добавь 2-3 эмодзи, соответствующие настроению. Только текст ответа."
+    ),
+    (
+        "Напиши одно предложение на русском — короткое, чувственное, с откровенным намёком. "
+        "Как будто описываешь момент, от которого захватывает дух и хочется продолжения. "
+        "Настроение задают слова: {tags}. Добавь 2-3 уместных эмодзи. Без кавычек."
+    ),
+]
+
+def trim_to_sentence(text, max_len=300):
+    """
+    Обрезает текст до max_len, но так, чтобы он заканчивался на .!?
+    Если в пределах max_len нет знака препинания, обрезает по последнему пробелу.
+    """
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    # Ищем последний знак препинания (.!?) в пределах обрезанной строки
+    last_punct = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
+    if last_punct > max_len * 0.7:  # если знак препинания найден и он не слишком близко к началу
+        return truncated[:last_punct+1]
+    # Иначе обрезаем по последнему пробелу, чтобы не было обрывка слова
+    last_space = truncated.rfind(' ')
+    if last_space > max_len * 0.7:
+        return truncated[:last_space] + '...'
+    # Если ничего не подошло, просто обрезаем с многоточием
+    return truncated + '...'
+
 def _safe_tags(tags):
+    """Убирает NSFW-теги — используется и для промпта, и для хэштегов."""
     return [t for t in tags if t.lower() not in NSFW_TRIGGER_TAGS]
 
 def _is_valid_response(text):
-    bad = ["I'm sorry", "I can't", "As an AI", "не могу"]
-    return bool(text) and len(text) > 5 and not any(b in text for b in bad)
+    bad_phrases = [
+        "I'm sorry", "I can't", "I cannot", "<!DOCTYPE", "<html", "As an AI",
+        "Не могу выполнить этот запрос", "Извините, я не могу", "Я не могу",
+        "не могу выполнить", "не могу ответить", "не могу сгенерировать"
+    ]
+    return bool(text) and len(text) > 5 and not any(p in text for p in bad_phrases)
 
-def maybe_add_engagement(text):
-    if random.random() < 0.35:
-        return text + "\n\n" + random.choice(ENGAGEMENT_LINES)
-    return text
-
-def trim_text(text, max_len=220):
-    if len(text) <= max_len:
-        return text
-    return text[:max_len].rsplit(" ", 1)[0] + "..."
-
-def add_noise(text):
-    if random.random() < 0.2:
-        text = text.replace("...", "..")
-    if random.random() < 0.2:
-        text = text.replace("😈", "😏")
-    return text
-
-# ==================== PROMPT ====================
 def _build_prompt(tags):
-    if not tags:
+    safe = _safe_tags(tags)
+    if not safe:
         return None
+    tags_str = ", ".join(safe[:8])
+    return random.choice(PROMPT_TEMPLATES).format(tags=tags_str)
 
-    persona = random.choice(PERSONA_LINES)
-    format_type = random.choice(FORMAT_TYPES)
+def _format_caption(ai_text, tags, footer):
+    safe_tags = _safe_tags(tags)
+    hashtags = " ".join(f"#{t}" for t in safe_tags[:8]) if safe_tags else ""
+    return f"{ai_text}\n\n{hashtags}\n\n{footer}"
 
-    if format_type == "single":
-        format_instruction = "Напиши ОДНУ короткую строку."
-    elif format_type == "double":
-        format_instruction = "Напиши ДВЕ короткие строки."
-    else:
-        format_instruction = "Напиши короткий диалог из 2 реплик."
-
-    tags_str = ", ".join(tags[:10])
-
-    return f"""
-{persona}
-
-Ты пишешь короткие подписи к откровенным артам.
-
-Стиль:
-— намёк, а не прямое описание
-— уверенность
-— провокация
-— минимум слов
-
-Настроение: {tags_str}
-
-{format_instruction}
-
-Добавь 1-3 эмодзи.
-Без объяснений.
-"""
-
-# ==================== API ====================
 def _try_groq(prompt):
     if not GROQ_API_KEY:
+        logger.info("No GROQ_API_KEY, skipping Groq")
         return None
     try:
         import json
-        r = requests.post(
+        response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json"
-            },
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
             data=json.dumps({
                 "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 120,
-                "temperature": 0.95
+                "max_tokens": 120,   # увеличено для более полных ответов
+                "temperature": 0.9
             }),
             timeout=15
         )
-        if r.status_code == 200:
-            text = r.json()["choices"][0]["message"]["content"].strip()
+        if response.status_code == 200:
+            data = response.json()
+            text = data["choices"][0]["message"]["content"].strip()
             if _is_valid_response(text):
-                logger.info("Caption via Groq")
+                text = trim_to_sentence(text, max_len=300)  # обрезаем до целого предложения
+                logger.info("✅ Groq caption generated")
                 return text
+            else:
+                logger.warning(f"Groq bad response: {text[:80]}")
+        else:
+            logger.warning(f"Groq status {response.status_code}")
     except Exception as e:
         logger.error(f"Groq error: {e}")
     return None
@@ -132,38 +119,63 @@ def _try_groq(prompt):
 def _try_pollinations(prompt):
     try:
         encoded = urllib.parse.quote(prompt)
-        r = requests.get(f"https://text.pollinations.ai/{encoded}", timeout=20)
-        if r.status_code == 200:
-            text = r.text.strip()
+        response = requests.get(f"https://text.pollinations.ai/{encoded}", timeout=20)
+        if response.status_code == 200:
+            text = response.text.strip()
             if _is_valid_response(text):
-                logger.info("Caption via Pollinations")
+                text = trim_to_sentence(text, max_len=300)  # обрезаем до целого предложения
+                logger.info("✅ Pollinations GET caption generated")
                 return text
+            else:
+                logger.warning(f"Pollinations GET bad response: {text[:80]}")
+    except requests.exceptions.Timeout:
+        logger.warning("Pollinations GET timeout, trying POST...")
     except Exception as e:
-        logger.error(f"Pollinations error: {e}")
+        logger.warning(f"Pollinations GET failed: {e}")
+
+    try:
+        response = requests.post(
+            "https://text.pollinations.ai/",
+            json={"messages": [{"role": "user", "content": prompt}], "model": "openai", "private": True},
+            headers={"Content-Type": "application/json"},
+            timeout=20
+        )
+        if response.status_code == 200:
+            text = response.text.strip()
+            if _is_valid_response(text):
+                text = trim_to_sentence(text, max_len=300)  # обрезаем до целого предложения
+                logger.info("✅ Pollinations POST caption generated")
+                return text
+            else:
+                logger.warning(f"Pollinations POST bad response: {text[:80]}")
+    except requests.exceptions.Timeout:
+        logger.warning("Pollinations POST timeout")
+    except Exception as e:
+        logger.error(f"Pollinations POST failed: {e}")
     return None
 
-# ==================== MAIN ====================
-def generate_caption(tags, rating, likes, **kwargs):
+def fallback_caption(tags, footer):
+    safe_tags = _safe_tags(tags)
+    tags_line = " ".join(f"#{t}" for t in safe_tags[:8]) if safe_tags else ""
+    return f"{tags_line}\n\n{footer}"
+
+def generate_caption(tags, rating, likes, image_data=None, image_url=None,
+                     watermark="📢 @eroslabai", suggestion="💬 Предложка: @Haillord"):
+    footer = f"{watermark}\n{suggestion}"
+
+    # Если нет тегов — не генерируем текст, только хэштеги и футер
     if not tags:
-        return ""
+        return fallback_caption(tags, footer)
 
     prompt = _build_prompt(tags)
+    if not prompt:
+        return fallback_caption(tags, footer)
 
-    text = _try_groq(prompt) or _try_pollinations(prompt)
+    text = _try_groq(prompt)
+    if not text:
+        text = _try_pollinations(prompt)
 
     if not text:
-        text = "Слишком тихо... и это настораживает 😏"
+        return fallback_caption(tags, footer)
 
-    text = trim_text(text)
-    text = add_noise(text)
-    text = maybe_add_engagement(text)
-
-    safe_tags = _safe_tags(tags)
-    if not safe_tags:
-        safe_tags = tags[:5]
-
-    hashtags = " ".join(f"#{t}" for t in safe_tags[:8])
-
-    footer = "📢 @eroslabai\n💬 Предложка: @Haillord"
-
-    return f"{text}\n\n{hashtags}\n\n{footer}"
+    return _format_caption(text, tags, footer)
