@@ -1,5 +1,5 @@
 {
-  "total_posts": 59,
+  "total_posts": 60,
   "sources": {},
   "top_tags": {
     "nsfw": 1,
@@ -70,6 +70,11 @@
     "serene_melancholic_mood": 1,
     "high_detail": 1,
     "wide_cinematic_composition": 1,
-    "masterpiece_quality": 1
+    "masterpiece_quality": 1,
+    "score_9": 1,
+    "score_8_up": 1,
+    "score_7_up": 1,
+    "cyberrealisticpony_posv1": 1,
+    "natural_skin": 1
   }
 }
