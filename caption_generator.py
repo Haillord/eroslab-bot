@@ -70,14 +70,10 @@ def _build_prompt(tags):
     return random.choice(PROMPT_TEMPLATES).format(tags=tags_str)
 
 
-def _format_caption(ai_text, tags):
-    """Форматирует финальный текст поста"""
+def _format_caption(ai_text, tags, footer):
+    """Форматирует финальный текст поста с футером"""
     hashtags = " ".join(f"#{t}" for t in tags[:8]) if tags else ""
-    return (
-        f"{ai_text}\n\n"
-        f"{hashtags}\n\n"
-        f"📢 @eroslabai"
-    )
+    return f"{ai_text}\n\n{hashtags}\n\n{footer}"
 
 
 def _try_groq(prompt):
@@ -176,13 +172,22 @@ def _try_pollinations(prompt):
     return None
 
 
-def generate_caption(tags, rating, likes, image_data=None, image_url=None):
+def fallback_caption(tags, footer):
+    """Запасной вариант — только теги и футер"""
+    tags_line = " ".join(f"#{t}" for t in tags[:8]) if tags else ""
+    return f"{tags_line}\n\n{footer}"
+
+
+def generate_caption(tags, rating, likes, image_data=None, image_url=None,
+                     watermark="📢 @eroslabai", suggestion="💬 Предложка: @Haillord"):
     """
     Генерирует описание:
       1. Если есть image_data и тегов мало (<3) и это картинка — пробуем Groq Vision
       2. Если теги есть — Groq/Pollinations с тегами
       3. Если тегов нет — нейтральное описание через AI
     """
+    
+    footer = f"{watermark}\n{suggestion}"
     
     # ========== VISION: если тегов мало и это изображение ==========
     use_vision = (
@@ -198,11 +203,7 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None):
         vision_text = vision.analyze(image_data, language="ru")
         if vision_text:
             hashtags = " ".join(f"#{t}" for t in tags[:8]) if tags else ""
-            return (
-                f"👁️ {vision_text}\n\n"
-                f"{hashtags}\n\n"
-                f"📢 @eroslabai"
-            )
+            return f"👁️ {vision_text}\n\n{hashtags}\n\n{footer}"
         else:
             logger.info("Vision failed, falling back to text generation")
     
@@ -221,15 +222,15 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None):
             text = _try_pollinations(prompt)
         
         if text:
-            return f"{text}\n\n📢 @eroslabai"
+            return f"{text}\n\n{footer}"
         else:
-            return fallback_caption(tags)
+            return fallback_caption(tags, footer)
 
     # Если теги есть — используем текущую логику
     prompt = _build_prompt(tags)
     if not prompt:
         logger.info("No safe tags for AI, using fallback")
-        return fallback_caption(tags)
+        return fallback_caption(tags, footer)
 
     text = _try_groq(prompt)
     if not text:
@@ -238,12 +239,6 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None):
 
     if not text:
         logger.info("All AI failed, using fallback")
-        return fallback_caption(tags)
+        return fallback_caption(tags, footer)
 
-    return _format_caption(text, tags)
-
-
-def fallback_caption(tags):
-    """Запасной вариант — только теги и водяной знак"""
-    tags_line = " ".join(f"#{t}" for t in tags[:8]) if tags else ""
-    return f"{tags_line}\n\n📢 @eroslabai"
+    return _format_caption(text, tags, footer)

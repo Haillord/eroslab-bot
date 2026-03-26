@@ -367,12 +367,14 @@ async def main():
     # ========== ОТПРАВКА В TELEGRAM ==========
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     caption = generate_caption(
-    tags=item["tags"],
-    rating=item["rating"],
-    likes=item["likes"],
-    image_data=data,      # <-- передаём картинку для Vision
-    image_url=item["url"] # <-- передаём URL для определения типа
-)
+        tags=item["tags"],
+        rating=item["rating"],
+        likes=item["likes"],
+        image_data=data,
+        image_url=item["url"],
+        watermark=WATERMARK_TEXT,
+        suggestion="💬 Предложка: @Haillord"
+    )
 
     logger.info(f"Tags for caption ({len(item['tags'])}): {item['tags'][:8]}")
     logger.info(f"Caption preview: {caption[:100]}")
