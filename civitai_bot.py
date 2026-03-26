@@ -98,21 +98,29 @@ def has_blacklisted(tags):
         return True
     return False
 
-def check_image_size(data):
-    """Проверка размера изображения"""
+def check_media_size(data, url):
+    """Проверка размера медиафайла (изображение или видео)"""
     try:
-        img = Image.open(BytesIO(data))
-        width, height = img.size
-        if width < MIN_IMAGE_SIZE or height < MIN_IMAGE_SIZE:
-            logger.debug(f"Image too small: {width}x{height}")
-            return False
-        return True
+        # Для изображений
+        if not url.lower().endswith((".mp4", ".webm", ".gif")):
+            img = Image.open(BytesIO(data))
+            width, height = img.size
+            if width >= MIN_IMAGE_SIZE and height >= MIN_IMAGE_SIZE:
+                return True
+            else:
+                logger.warning(f"Image too small: {width}x{height}")
+                return False
+        # Для видео - пропускаем проверку размера
+        else:
+            logger.info(f"Video file, skipping size check")
+            return True
     except Exception as e:
-        logger.error(f"Error checking image size: {e}")
+        logger.error(f"Error checking media size: {e}")
+        # Если не удалось проверить, лучше пропустить
         return False
 
 def add_watermark(data, text):
-    """Добавление водяного знака"""
+    """Добавление водяного знака (только для изображений)"""
     try:
         img = Image.open(BytesIO(data)).convert("RGBA")
         w, h = img.size
@@ -281,9 +289,9 @@ async def main():
         logger.error(f"Download Error: {e}")
         return
 
-    # Проверка размера
-    if not check_image_size(data):
-        logger.warning("Image size too small, skipping")
+    # Проверка размера (теперь поддерживает и видео)
+    if not check_media_size(data, item["url"]):
+        logger.warning("Media size too small, skipping")
         posted_ids.add(item["id"])  # Помечаем как просмотренное
         save_all()
         return
