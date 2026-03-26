@@ -2,6 +2,7 @@ import sys
 import json
 import base64
 import requests
+import os
 from datetime import datetime
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -9,8 +10,8 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QHeaderView, QSpinBox, QMessageBox, QInputDialog,
     QListWidget, QListWidgetItem, QSplitter, QGroupBox, QFormLayout, QComboBox
 )
-from PySide6.QtCore import Qt, QThread, Signal, QSize
-from PySide6.QtGui import QFont, QIcon, QColor, QPalette
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QAction
 
 # ---------------------------- GitHub API класс ----------------------------
 class GitHubAPI:
@@ -81,6 +82,25 @@ class ApiWorker(QThread):
             self.finished.emit(result)
         except Exception as e:
             self.error.emit(str(e))
+
+
+# ---------------------------- Сохранение/загрузка данных ----------------------------
+CREDENTIALS_FILE = "credentials.json"
+
+def save_credentials(token, owner, repo):
+    data = {
+        "token": token,
+        "owner": owner,
+        "repo": repo
+    }
+    with open(CREDENTIALS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def load_credentials():
+    if not os.path.exists(CREDENTIALS_FILE):
+        return None
+    with open(CREDENTIALS_FILE, "r") as f:
+        return json.load(f)
 
 
 # ---------------------------- Стили ----------------------------
@@ -183,6 +203,8 @@ class AuthWidget(QWidget):
         if not token or not owner or not repo:
             QMessageBox.warning(self, "Error", "All fields are required")
             return
+        # Сохраняем данные
+        save_credentials(token, owner, repo)
         self.api = GitHubAPI(token, owner, repo)
         self.auth_success.emit(self.api)
 
@@ -278,7 +300,6 @@ class SettingsWidget(QWidget):
     def setup_ui(self):
         layout = QVBoxLayout()
 
-        # Основные настройки
         group_main = QGroupBox("General Settings")
         form = QFormLayout()
         self.spin_min_likes = QSpinBox()
@@ -292,7 +313,6 @@ class SettingsWidget(QWidget):
         group_main.setLayout(form)
         layout.addWidget(group_main)
 
-        # Чёрный список тегов
         group_blacklist = QGroupBox("Blacklist Tags")
         black_layout = QVBoxLayout()
         self.blacklist_list = QListWidget()
@@ -309,7 +329,6 @@ class SettingsWidget(QWidget):
         group_blacklist.setLayout(black_layout)
         layout.addWidget(group_blacklist)
 
-        # Шаблоны промптов
         group_prompts = QGroupBox("Prompt Templates")
         prompts_layout = QVBoxLayout()
         self.prompts_list = QListWidget()
@@ -406,7 +425,6 @@ class HistoryStatsWidget(QWidget):
         layout = QVBoxLayout()
         splitter = QSplitter(Qt.Horizontal)
 
-        # История (posted_ids.json)
         hist_group = QGroupBox("Posted IDs")
         hist_layout = QVBoxLayout()
         self.hist_table = QTableWidget()
@@ -424,7 +442,6 @@ class HistoryStatsWidget(QWidget):
         hist_layout.addLayout(btn_layout)
         hist_group.setLayout(hist_layout)
 
-        # Статистика
         stats_group = QGroupBox("Statistics")
         stats_layout = QVBoxLayout()
         self.stats_label = QLabel()
@@ -546,6 +563,22 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(DARK_STYLE)
 
         self.api = None
+        # Проверяем, есть ли сохранённые данные
+        creds = load_credentials()
+        if creds:
+            # Пытаемся автоматически подключиться
+            try:
+                self.api = GitHubAPI(creds["token"], creds["owner"], creds["repo"])
+                # Проверим подключение, например, получив содержимое любого файла
+                self.api.get_file_content("config.json")  # просто проверка
+                self.setup_main_ui()
+                return
+            except Exception as e:
+                # Если не удалось, показываем форму авторизации
+                QMessageBox.warning(self, "Connection Error", f"Could not connect with saved credentials: {e}")
+                # Удаляем некорректные данные
+                if os.path.exists(CREDENTIALS_FILE):
+                    os.remove(CREDENTIALS_FILE)
         self.setup_auth()
 
     def setup_auth(self):
@@ -571,6 +604,20 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.logs_tab, "📋 All Logs")
 
         self.setCentralWidget(self.tabs)
+
+        # Добавляем меню "Account" для смены аккаунта
+        menubar = self.menuBar()
+        account_menu = menubar.addMenu("Account")
+        change_action = QAction("Change Account", self)
+        change_action.triggered.connect(self.change_account)
+        account_menu.addAction(change_action)
+
+    def change_account(self):
+        # Удаляем сохранённые данные и перезапускаем приложение
+        if os.path.exists(CREDENTIALS_FILE):
+            os.remove(CREDENTIALS_FILE)
+        # Возвращаем форму авторизации
+        self.setup_auth()
 
 
 # ---------------------------- Запуск ----------------------------
