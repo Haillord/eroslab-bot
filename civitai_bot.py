@@ -233,24 +233,24 @@ def optimize_video(data: bytes) -> bytes:
             # Легкая оптимизация - только для streaming и thumbnail
             cmd = [
                 'ffmpeg', '-y', '-i', tmp_path,
-                '-c:v', 'libx264', '-preset', 'superfast', '-crf', '20',
-                '-profile:v', 'baseline', '-level', '3.0',
+                '-c:v', 'libx265', '-preset', 'superfast', '-crf', '22',
+                '-profile:v', 'main', '-level', '4.2',
                 '-c:a', 'aac', '-b:a', '192k',
                 '-movflags', '+faststart',
-                '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720',
-                '-b:v', '2000k', '-maxrate', '2500k', '-bufsize', '4000k',
+                '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080',
+                '-b:v', '2500k', '-maxrate', '3500k', '-bufsize', '5000k',
                 output_path
             ]
         else:
             # Сильная оптимизация для больших видео
             cmd = [
                 'ffmpeg', '-y', '-i', tmp_path,
-                '-c:v', 'libx264', '-preset', 'superfast', '-crf', '25',
-                '-profile:v', 'baseline', '-level', '3.0',
+                '-c:v', 'libx265', '-preset', 'superfast', '-crf', '24',
+                '-profile:v', 'main', '-level', '4.2',
                 '-c:a', 'aac', '-b:a', '128k',
                 '-movflags', '+faststart',
-                '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720',
-                '-b:v', '1500k', '-maxrate', '2000k', '-bufsize', '3000k',
+                '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080',
+                '-b:v', '2000k', '-maxrate', '3000k', '-bufsize', '4000k',
                 output_path
             ]
         
