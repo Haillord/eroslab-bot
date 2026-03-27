@@ -237,7 +237,7 @@ def optimize_video(data: bytes) -> bytes:
                 '-profile:v', 'main', '-level', '4.2',
                 '-c:a', 'aac', '-b:a', '192k',
                 '-movflags', '+faststart',
-                '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080',
+                '-vf', 'scale=if(gt(iw,ih),1920,1080):if(gt(iw,ih),1080,1920):force_original_aspect_ratio=decrease,pad=if(gt(iw,ih),1920,1080):if(gt(iw,ih),1080,1920):(ow-iw)/2:(oh-ih)/2',
                 '-b:v', '2500k', '-maxrate', '3500k', '-bufsize', '5000k',
                 output_path
             ]
@@ -249,7 +249,7 @@ def optimize_video(data: bytes) -> bytes:
                 '-profile:v', 'main', '-level', '4.2',
                 '-c:a', 'aac', '-b:a', '128k',
                 '-movflags', '+faststart',
-                '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080',
+                '-vf', 'scale=if(gt(iw,ih),1920,1080):if(gt(iw,ih),1080,1920):force_original_aspect_ratio=decrease,pad=if(gt(iw,ih),1920,1080):if(gt(iw,ih),1080,1920):(ow-iw)/2:(oh-ih)/2',
                 '-b:v', '2000k', '-maxrate', '3000k', '-bufsize', '4000k',
                 output_path
             ]
