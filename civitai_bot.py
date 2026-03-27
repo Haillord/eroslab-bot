@@ -320,27 +320,10 @@ def fetch_civitai():
             erotic_items = []
             for item in items:
                 try:
-                    nsfw_level = item.get("nsfwLevel")
-                    
-                    # ОТЛАДКА: выводим что пришло от API
-                    logger.debug(f"Raw nsfwLevel: {nsfw_level} (type: {type(nsfw_level)})")
-                    
-                    is_suitable = False
-
-                    if isinstance(nsfw_level, int):
-                        # Принимаем R (4), X (8, 16) и XXX (32)
-                        if nsfw_level >= 4:
-                            is_suitable = True
-                            logger.debug(f"✓ Integer nsfwLevel {nsfw_level} >= 4, accepted")
-                    elif isinstance(nsfw_level, str):
-                        if nsfw_level.upper() in ["R", "X", "XXX"]:
-                            is_suitable = True
-                            logger.debug(f"✓ String nsfwLevel '{nsfw_level}' in [R, X, XXX], accepted")
-                    else:
-                        logger.debug(f"✗ nsfwLevel {nsfw_level} not suitable (type: {type(nsfw_level)})")
-
-                    if not is_suitable:
-                        continue
+                    # Убираем проверку nsfwLevel - доверяем параметрам запроса
+                    # API CivitAI изменил формат, nsfwLevel теперь "None" вместо чисел
+                    is_suitable = True
+                    logger.debug(f"✓ Skipping nsfwLevel check, trusting API params")
 
                     tags = extract_tags(item)
                     
@@ -371,14 +354,14 @@ def fetch_civitai():
                         "url":     item.get("url", ""),
                         "tags":    tags[:15],
                         "likes":   likes,
-                        "rating":  nsfw_level,
+                        "rating":  params["nsfwLevel"],
                         "post_id": item.get("postId"),
                         "source":  "civitai",
                     })
 
                     logger.debug(
                         f"✓ Added {item['id']} "
-                        f"(rating:{nsfw_level}, likes:{likes}, tags:{len(tags)})"
+                        f"(rating:{params['nsfwLevel']}, likes:{likes}, tags:{len(tags)})"
                     )
 
                 except Exception as e:
