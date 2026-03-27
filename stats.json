@@ -1,5 +1,5 @@
 {
-  "total_posts": 92,
+  "total_posts": 93,
   "sources": {},
   "top_tags": {
     "nsfw": 1,
@@ -68,7 +68,7 @@
     "clear_vulva14": 1,
     "the_sun_low_on_the_horizon": 1,
     "serene_melancholic_mood": 1,
-    "high_detail": 1,
+    "high_detail": 2,
     "wide_cinematic_composition": 1,
     "masterpiece_quality": 1,
     "score_9": 1,
@@ -108,6 +108,10 @@
     "wan22_ai_generated": 1,
     "looking_at_viewer": 2,
     "breasts": 1,
-    "smile": 1
+    "smile": 1,
+    "ultra_hd": 1,
+    "cinematic_lighting": 1,
+    "photorealistic": 1,
+    "impressionism": 1
   }
 }
