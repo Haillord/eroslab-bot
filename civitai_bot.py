@@ -251,7 +251,7 @@ def optimize_video(data: bytes) -> bytes:
                 output_path
             ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
         if result.returncode == 0 and os.path.exists(output_path):
             with open(output_path, 'rb') as f:
