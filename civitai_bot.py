@@ -325,6 +325,12 @@ def fetch_civitai():
                     # 1 - PG, 2 - PG13, 4 - R, 8 - X, 16 - X, 32 - XXX
                     actual_nsfw_level = item.get("nsfwLevel", 0)
                     
+                    # Преобразуем в число если это строка
+                    try:
+                        actual_nsfw_level = int(actual_nsfw_level)
+                    except (ValueError, TypeError):
+                        continue
+                    
                     # Если рейтинг ниже 8 (X), пропускаем
                     if actual_nsfw_level < 8:
                         continue
