@@ -21,7 +21,7 @@ def fetch_rule34(api_key: str, user_id: str, tags: str = "3d animated -low_res",
         "limit": limit,
         "tags": tags,
         "api_key": api_key,
-        "id": user_id  # В API Rule34 параметр 'id' используется для User ID
+        "user_id": user_id # В API Rule34 параметр 'id' используется для User ID
     }
     
     try:
