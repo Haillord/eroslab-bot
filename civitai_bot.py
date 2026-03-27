@@ -216,69 +216,6 @@ def extract_thumbnail(data: bytes) -> bytes:
         if thumb_path and os.path.exists(thumb_path):
             os.unlink(thumb_path)
 
-def optimize_video(data: bytes) -> bytes:
-    """Оптимизирует видео для Telegram (H.264, умная оптимизация)"""
-    tmp_path = None
-    output_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
-            tmp.write(data)
-            tmp_path = tmp.name
-
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output:
-            output_path = output.name
-
-        # Если видео уже <= 30MB - оптимизируем минимально для thumbnail
-        if len(data) <= 30 * 1024 * 1024:
-            # Легкая оптимизация - только для streaming и thumbnail
-            cmd = [
-                'ffmpeg', '-y', '-i', tmp_path,
-                '-c:v', 'libx265', '-preset', 'superfast', '-crf', '22',
-                '-profile:v', 'main', '-level', '4.2',
-                '-c:a', 'aac', '-b:a', '192k',
-                '-movflags', '+faststart',
-                '-vf', 'scale=if(gt(iw,ih),1920,1080):if(gt(iw,ih),1080,1920):force_original_aspect_ratio=decrease,pad=if(gt(iw,ih),1920,1080):if(gt(iw,ih),1080,1920):(ow-iw)/2:(oh-ih)/2',
-                '-b:v', '2500k', '-maxrate', '3500k', '-bufsize', '5000k',
-                output_path
-            ]
-        else:
-            # Сильная оптимизация для больших видео
-            cmd = [
-                'ffmpeg', '-y', '-i', tmp_path,
-                '-c:v', 'libx265', '-preset', 'superfast', '-crf', '24',
-                '-profile:v', 'main', '-level', '4.2',
-                '-c:a', 'aac', '-b:a', '128k',
-                '-movflags', '+faststart',
-                '-vf', 'scale=if(gt(iw,ih),1920,1080):if(gt(iw,ih),1080,1920):force_original_aspect_ratio=decrease,pad=if(gt(iw,ih),1920,1080):if(gt(iw,ih),1080,1920):(ow-iw)/2:(oh-ih)/2',
-                '-b:v', '2000k', '-maxrate', '3000k', '-bufsize', '4000k',
-                output_path
-            ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-
-        if result.returncode == 0 and os.path.exists(output_path):
-            with open(output_path, 'rb') as f:
-                optimized_data = f.read()
-            
-            # Проверяем размер - не должен превышать 50MB после оптимизации
-            if len(optimized_data) <= 50 * 1024 * 1024:
-                logger.info(f"Video optimized: {len(data)} -> {len(optimized_data)} bytes")
-                return optimized_data
-            else:
-                logger.warning("Optimized video still too large (>50MB)")
-                return None
-        else:
-            logger.warning("Video optimization failed")
-            return None
-
-    except Exception as e:
-        logger.error(f"Video optimization error: {e}")
-        return None
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-        if output_path and os.path.exists(output_path):
-            os.unlink(output_path)
 
 # ==================== RETRY ДЛЯ TELEGRAM ====================
 async def send_with_retry(func, *args, retries=3, **kwargs):
@@ -673,14 +610,9 @@ async def main():
         if url_lower.endswith((".mp4", ".webm", ".gif")):
             logger.info("Sending as video/gif")
             
-            # Оптимизируем видео для Telegram
-            optimized_data = optimize_video(data)
-            if optimized_data:
-                video_data = optimized_data
-                logger.info("Using optimized video")
-            else:
-                video_data = data
-                logger.warning("Using original video (optimization failed)")
+            # Используем видео без оптимизации
+            video_data = data
+            logger.info("Using original video (no optimization)")
             
             # Извлекаем thumbnail
             thumbnail_data = extract_thumbnail(video_data)
