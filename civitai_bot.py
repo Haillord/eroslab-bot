@@ -20,14 +20,11 @@ from PIL import Image, ImageDraw, ImageFont
 import telegram
 from telegram import Bot
 from caption_generator import generate_caption
-from rule34_api import fetch_rule34
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "@eroslabai")
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
-RULE34_API_KEY      = os.environ.get("RULE34_API_KEY", "")
-RULE34_USER_ID      = os.environ.get("RULE34_USER_ID", "")
 
 WATERMARK_TEXT   = "@eroslabai"
 MIN_LIKES        = 20
@@ -324,22 +321,34 @@ def fetch_civitai():
             for item in items:
                 try:
                     nsfw_level = item.get("nsfwLevel")
+                    
+                    # ОТЛАДКА: выводим что пришло от API
+                    logger.debug(f"Raw nsfwLevel: {nsfw_level} (type: {type(nsfw_level)})")
+                    
                     is_suitable = False
 
                     if isinstance(nsfw_level, int):
                         # Принимаем R (4), X (8, 16) и XXX (32)
                         if nsfw_level >= 4:
                             is_suitable = True
+                            logger.debug(f"✓ Integer nsfwLevel {nsfw_level} >= 4, accepted")
                     elif isinstance(nsfw_level, str):
                         if nsfw_level.upper() in ["R", "X", "XXX"]:
                             is_suitable = True
+                            logger.debug(f"✓ String nsfwLevel '{nsfw_level}' in [R, X, XXX], accepted")
+                    else:
+                        logger.debug(f"✗ nsfwLevel {nsfw_level} not suitable (type: {type(nsfw_level)})")
 
                     if not is_suitable:
                         continue
 
                     tags = extract_tags(item)
+                    
+                    # ОТЛАДКА: выводим теги
+                    logger.debug(f"Tags for {item.get('id')}: {tags[:5]}")
 
                     if has_blacklisted(tags):
+                        logger.debug(f"✗ Tags blacklisted for {item.get('id')}")
                         continue
 
                     stats_data = item.get("stats", {})
@@ -349,8 +358,12 @@ def fetch_civitai():
                             stats_data.get("likeCount", 0)
                             + stats_data.get("heartCount", 0)
                         )
+                    
+                    # ОТЛАДКА: выводим лайки
+                    logger.debug(f"Likes for {item.get('id')}: {likes} (MIN_LIKES: {MIN_LIKES})")
 
                     if likes < MIN_LIKES:
+                        logger.debug(f"✗ Likes {likes} < {MIN_LIKES} for {item.get('id')}")
                         continue
 
                     erotic_items.append({
@@ -385,18 +398,8 @@ def fetch_civitai():
     return []
 
 def fetch_and_pick():
-    if random.random() < 0.4:
-        source = "rule34"
-        logger.info("Source: Rule34")
-        items = fetch_rule34(
-            api_key=RULE34_API_KEY, 
-            user_id=RULE34_USER_ID, 
-            tags="3d animated"
-        )
-    else:
-        source = "civitai"
-        logger.info("Source: CivitAI")
-        items = fetch_civitai()
+    logger.info("Source: CivitAI")
+    items = fetch_civitai()
 
     if not items:
         logger.warning("No items found from API")
