@@ -20,11 +20,14 @@ from PIL import Image, ImageDraw, ImageFont
 import telegram
 from telegram import Bot
 from caption_generator import generate_caption
+from rule34_api import fetch_rule34
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "@eroslabai")
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
+RULE34_API_KEY      = os.environ.get("RULE34_API_KEY", "")
+RULE34_USER_ID      = os.environ.get("RULE34_USER_ID", "")
 
 WATERMARK_TEXT   = "@eroslabai"
 MIN_LIKES        = 20
@@ -400,8 +403,17 @@ def fetch_civitai():
     return []
 
 def fetch_and_pick():
-    items = fetch_civitai()
-
+    if random.random() < 0.4:
+        source = "rule34"
+        items = fetch_rule34(
+            api_key=RULE34_API_KEY, 
+            user_id=RULE34_USER_ID, 
+            tags="3d high_res -low_res"
+        )
+    else:
+        source = "civitai"
+        items = fetch_civitai()
+    
     if not items:
         logger.warning("No items found from API")
         return None
