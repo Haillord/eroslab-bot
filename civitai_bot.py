@@ -336,15 +336,10 @@ def fetch_civitai():
                     except (ValueError, TypeError):
                         actual_nsfw_level = 0
 
-                    # Если nsfw=True но уровень не определился — ставим минимум R (4)
-                    if is_nsfw and actual_nsfw_level < 4:
-                        actual_nsfw_level = 4
-
+                    # CivitAI не возвращает корректный рейтинг в полях nsfw/browsingLevel —
+                    # фильтрация уже сделана параметром nsfwLevel в запросе (16/32 = X/XXX).
+                    # Просто логируем для информации.
                     logger.debug(f"Item {item.get('id')}: nsfw={is_nsfw}, level={actual_nsfw_level}")
-
-                    # Фильтр: только R и выше (4=R, 8/16=X, 32=XXX)
-                    if actual_nsfw_level < 4:
-                        continue
 
                     tags = extract_tags(item)
                     logger.debug(f"Item {item.get('id')}: tags={tags[:5]}")
