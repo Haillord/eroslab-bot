@@ -20,7 +20,6 @@ from PIL import Image, ImageDraw, ImageFont
 import telegram
 from telegram import Bot
 from caption_generator import generate_caption
-from rule34_api import fetch_rule34
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -374,14 +373,9 @@ def fetch_civitai():
     return []
 
 def fetch_and_pick():
-    if random.random() < 0.4:
-        source = "rule34"
-        logger.info("Source: Rule34")
-        items = fetch_rule34(tags="3d animated")
-    else:
-        source = "civitai"
-        logger.info("Source: CivitAI")
-        items = fetch_civitai()
+    source = "civitai"
+    logger.info("Source: CivitAI")
+    items = fetch_civitai()
 
     if not items:
         logger.warning("No items found from API")
@@ -460,7 +454,7 @@ async def main():
             return
 
         # Lazy-fetch тегов — только для CivitAI постов
-        if not item["tags"] and item.get("post_id") and item.get("source") != "rule34":
+        if not item["tags"] and item.get("post_id"):
             headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
             raw = fetch_tags_by_post_id(item["post_id"], headers, image_id=item["id"])
             fetched_tags = clean_tags([
