@@ -44,6 +44,7 @@ BLACKLIST_TAGS = {
 }
 
 HASHTAG_STOP_WORDS = {
+    "sfw", "nsfw", "cleansfw", "clean", "general",
     "score", "source", "rating", "version", "step", "steps", "cfg", "seed",
     "sampler", "model", "lora", "vae", "clip", "unet", "fp16", "safetensors",
     "checkpoint", "embedding", "none", "null", "true", "false", "and", "the",
@@ -320,15 +321,18 @@ def fetch_civitai():
             erotic_items = []
             for item in items:
                 try:
-                    # Убираем проверку nsfwLevel - доверяем параметрам запроса
-                    # API CivitAI изменил формат, nsfwLevel теперь "None" вместо чисел
-                    is_suitable = True
-
-                    tags = extract_tags(item)
-
-                    if has_blacklisted(tags):
+                    # ПОЛУЧАЕМ РЕАЛЬНЫЙ РЕЙТИНГ КАРТИНКИ
+                    # 1 - PG, 2 - PG13, 4 - R, 8 - X, 16 - X, 32 - XXX
+                    actual_nsfw_level = item.get("nsfwLevel", 0)
+                    
+                    # Если рейтинг ниже 8 (X), пропускаем
+                    if actual_nsfw_level < 8:
                         continue
 
+                    tags = extract_tags(item)
+                    if has_blacklisted(tags):
+                        continue
+                    
                     stats_data = item.get("stats", {})
                     likes = 0
                     if stats_data:
@@ -345,7 +349,7 @@ def fetch_civitai():
                         "url":     item.get("url", ""),
                         "tags":    tags[:15],
                         "likes":   likes,
-                        "rating":  params["nsfwLevel"],
+                        "rating":  actual_nsfw_level, # Сохраняем реальный уровень
                         "post_id": item.get("postId"),
                         "source":  "civitai",
                     })
