@@ -26,6 +26,8 @@ from rule34_api import fetch_rule34
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "@eroslabai")
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
+RULE34_API_KEY      = os.environ.get("RULE34_API_KEY", "")
+RULE34_USER_ID      = os.environ.get("RULE34_USER_ID", "")
 
 WATERMARK_TEXT   = "@eroslabai"
 MIN_LIKES        = 20
@@ -386,7 +388,11 @@ def fetch_and_pick():
     if random.random() < 0.4:
         source = "rule34"
         logger.info("Source: Rule34")
-        items = fetch_rule34(tags="3d animated")
+        items = fetch_rule34(
+            api_key=RULE34_API_KEY, 
+            user_id=RULE34_USER_ID, 
+            tags="3d animated"
+        )
     else:
         source = "civitai"
         logger.info("Source: CivitAI")
