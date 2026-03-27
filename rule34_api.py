@@ -30,13 +30,15 @@ def fetch_rule34(api_key: str, user_id: str, tags: str = "3d animated -low_res",
         r.raise_for_status()
         
         posts = r.json()
-        if not posts:
+        # ЗАЩИТА: Если пришла строка или не список, выходим без ошибки
+        if not isinstance(posts, list):
+            logger.error(f"Rule34 returned unexpected data type: {type(posts)}")
             return []
             
         results = []
         for post in posts:
-            # Фильтруем по рейтингу (e - explicit, q - questionable)
-            if post.get("rating") not in ["e", "q"]:
+            # Теперь .get() безопасен, так как мы знаем, что post внутри списка
+            if not isinstance(post, dict) or post.get("rating") not in ["e", "q"]:
                 continue
                 
             post_tags = post.get("tags", "").split()
