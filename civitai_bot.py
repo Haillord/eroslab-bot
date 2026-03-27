@@ -289,13 +289,11 @@ def _request_with_backoff(url, params, headers, max_retries=3):
 
 def fetch_civitai():
     variations = [
-        {"limit": 100, "nsfwLevel": 16, "sort": "Most Reactions", "period": "Day"},   # X рейтинг
-        {"limit": 100, "nsfwLevel": 16, "sort": "Most Reactions", "period": "Week"},
-        {"limit": 100, "nsfwLevel": 16, "sort": "Most Reactions", "period": "Month"},
-        {"limit": 100, "nsfwLevel": 16, "sort": "Newest",         "period": "Day"},
-        {"limit": 100, "nsfwLevel": 16, "sort": "Newest",         "period": "Week"},
-        {"limit": 100, "nsfwLevel": 32, "sort": "Most Reactions", "period": "Day"},   # XXX рейтинг
-        {"limit": 100, "nsfwLevel": 32, "sort": "Newest",         "period": "Day"},
+        {"limit": 100, "nsfw": "true", "sort": "Most Reactions", "period": "Day"},
+        {"limit": 100, "nsfw": "true", "sort": "Most Reactions", "period": "Week"},
+        {"limit": 100, "nsfw": "true", "sort": "Most Reactions", "period": "Month"},
+        {"limit": 100, "nsfw": "true", "sort": "Newest",         "period": "Day"},
+        {"limit": 100, "nsfw": "true", "sort": "Newest",         "period": "Week"},
     ]
 
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
