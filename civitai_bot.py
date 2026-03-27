@@ -20,6 +20,7 @@ from PIL import Image, ImageDraw, ImageFont
 import telegram
 from telegram import Bot
 from caption_generator import generate_caption
+from rule34_api import fetch_rule34
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -27,7 +28,7 @@ TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "@eroslabai")
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 
 WATERMARK_TEXT   = "@eroslabai"
-MIN_LIKES        = 10
+MIN_LIKES        = 20
 MIN_IMAGE_SIZE   = 512
 
 HISTORY_FILE = "posted_ids.json"
@@ -44,7 +45,6 @@ BLACKLIST_TAGS = {
 }
 
 HASHTAG_STOP_WORDS = {
-    "sfw", "nsfw", "cleansfw", "clean", "general",
     "score", "source", "rating", "version", "step", "steps", "cfg", "seed",
     "sampler", "model", "lora", "vae", "clip", "unet", "fp16", "safetensors",
     "checkpoint", "embedding", "none", "null", "true", "false", "and", "the",
@@ -53,7 +53,7 @@ HASHTAG_STOP_WORDS = {
 }
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
@@ -255,9 +255,6 @@ def fetch_tags_by_post_id(post_id: int, headers: dict, image_id: str = None) -> 
 
 # ==================== CIVITAI API ====================
 def _request_with_backoff(url, params, headers, max_retries=3):
-    # Добавляем User-Agent, чтобы Cloudflare не блокировал запрос (ошибка 525)
-    headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    
     for attempt in range(max_retries):
         try:
             r = requests.get(url, params=params, headers=headers, timeout=30)
@@ -273,10 +270,6 @@ def _request_with_backoff(url, params, headers, max_retries=3):
             if attempt < max_retries - 1:
                 time.sleep(3)
         except requests.exceptions.HTTPError as e:
-            # Если 404, не пробуем снова, а выходим сразу
-            if r.status_code == 404:
-                logger.error(f"404 Not Found for {url} with params {params}")
-                break 
             if r.status_code >= 500:
                 logger.warning(f"Server error {r.status_code}, retry {attempt + 1}/{max_retries}")
                 time.sleep(2 ** attempt * 2)
@@ -289,12 +282,13 @@ def _request_with_backoff(url, params, headers, max_retries=3):
 
 def fetch_civitai():
     variations = [
-        {"limit": 100, "nsfw": "X",      "sort": "Most Reactions", "period": "Day"},
-        {"limit": 100, "nsfw": "X",      "sort": "Most Reactions", "period": "Week"},
-        {"limit": 100, "nsfw": "X",      "sort": "Most Reactions", "period": "Month"},
-        {"limit": 100, "nsfw": "X",      "sort": "Newest",         "period": "Day"},
-        {"limit": 100, "nsfw": "Mature", "sort": "Most Reactions", "period": "Day"},
-        {"limit": 100, "nsfw": "Mature", "sort": "Newest",         "period": "Day"},
+        {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Day"},
+        {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Week"},
+        {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Month"},
+        {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Day"},
+        {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Week"},
+        {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Day"},
+        {"limit": 100, "nsfw": "XXX", "sort": "Newest",         "period": "Day"},
     ]
 
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
@@ -315,33 +309,24 @@ def fetch_civitai():
 
             logger.info(
                 f"Got {len(items)} items "
-                f"(sort={params['sort']}, period={params['period']})"
+                f"(nsfw={params['nsfw']}, sort={params['sort']}, period={params['period']})"
             )
 
             erotic_items = []
-            for idx, item in enumerate(items):
-                # Диагностика первых 3 итемов — смотрим реальную структуру от API
-                if idx < 3:
-                    logger.debug(f"[RAW item #{idx}] keys={list(item.keys())}")
-                    logger.debug(f"[RAW item #{idx}] nsfwLevel={item.get('nsfwLevel')!r}, id={item.get('id')!r}, url={item.get('url', 'N/A')[:60]}")
-
+            for item in items:
                 try:
-                    # CivitAI API возвращает nsfwLevel=null — используем nsfw (bool) + browsingLevel
-                    # nsfw=True означает минимум R-рейтинг
-                    is_nsfw = item.get("nsfw", False)
-                    raw_level = item.get("nsfwLevel") or item.get("browsingLevel", 0)
-                    try:
-                        actual_nsfw_level = int(raw_level) if raw_level is not None else 0
-                    except (ValueError, TypeError):
-                        actual_nsfw_level = 0
+                    nsfw_level = item.get("nsfwLevel")
 
-                    # CivitAI не возвращает корректный рейтинг в полях nsfw/browsingLevel —
-                    # фильтрация уже сделана параметром nsfwLevel в запросе (16/32 = X/XXX).
-                    # Просто логируем для информации.
-                    logger.debug(f"Item {item.get('id')}: nsfw={is_nsfw}, level={actual_nsfw_level}")
+                    is_x_rating = False
+                    if isinstance(nsfw_level, str) and nsfw_level.upper() in ["X", "XXX"]:
+                        is_x_rating = True
+                    elif isinstance(nsfw_level, (int, float)) and nsfw_level >= 4:
+                        is_x_rating = True
+
+                    if not is_x_rating:
+                        continue
 
                     tags = extract_tags(item)
-                    logger.debug(f"Item {item.get('id')}: tags={tags[:5]}")
 
                     if has_blacklisted(tags):
                         continue
@@ -354,8 +339,6 @@ def fetch_civitai():
                             + stats_data.get("heartCount", 0)
                         )
 
-                    logger.debug(f"Item {item.get('id')}: likes={likes}")
-
                     if likes < MIN_LIKES:
                         continue
 
@@ -364,10 +347,15 @@ def fetch_civitai():
                         "url":     item.get("url", ""),
                         "tags":    tags[:15],
                         "likes":   likes,
-                        "rating":  actual_nsfw_level, # Сохраняем реальный уровень
+                        "rating":  nsfw_level,
                         "post_id": item.get("postId"),
                         "source":  "civitai",
                     })
+
+                    logger.debug(
+                        f"✓ Added {item['id']} "
+                        f"(rating:{nsfw_level}, likes:{likes}, tags:{len(tags)})"
+                    )
 
                 except Exception as e:
                     logger.error(f"Error processing item {item.get('id')}: {e}")
@@ -386,8 +374,14 @@ def fetch_civitai():
     return []
 
 def fetch_and_pick():
-    logger.info("Source: CivitAI")
-    items = fetch_civitai()
+    if random.random() < 0.4:
+        source = "rule34"
+        logger.info("Source: Rule34")
+        items = fetch_rule34(tags="3d animated")
+    else:
+        source = "civitai"
+        logger.info("Source: CivitAI")
+        items = fetch_civitai()
 
     if not items:
         logger.warning("No items found from API")
