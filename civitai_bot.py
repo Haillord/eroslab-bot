@@ -317,7 +317,7 @@ def fetch_civitai():
 
             logger.info(
                 f"Got {len(items)} items "
-                f"(nsfw={params['nsfw']}, sort={params['sort']}, period={params['period']})"
+                f"(nsfwLevel={params['nsfwLevel']}, sort={params['sort']}, period={params['period']})"
             )
 
             erotic_items = []
