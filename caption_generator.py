@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
-VISION_MODEL = "nvidia/nemotron-nano-12b-v2-vl:free"
+VISION_MODEL = "google/gemini-2.0-flash-001"
 
 
 # ==================== ФИЛЬТРЫ ====================
@@ -170,10 +170,10 @@ def _describe_image(image_data: bytes = None, image_url: str = None) -> str:
                             {
                                 "type": "text",
                                 "text": (
-                                    "Describe the scene in a sensual, cinematic way. "
-                                    "Focus on mood, tension and interaction. "
-                                    "Avoid explicit words. "
-                                    "Write 1-2 short evocative sentences."
+                                    "Describe this image in Russian. "
+                                    "Focus on mood, tension and key elements. "
+                                    "Write 1-2 short evocative sentences. "
+                                    "Avoid explicit words."
                                 )
                             }
                         ]
