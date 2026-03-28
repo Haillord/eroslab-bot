@@ -3,12 +3,18 @@
 Стиль: дерзкая альтушка-анимешница. Без описания внешности напрямую.
 """
 
+import sys
+import io
 import requests
 import logging
 import random
 import urllib.parse
 import base64
 import os
+
+# Если проблема с выводом в консоль
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 logger = logging.getLogger(__name__)
 
@@ -310,8 +316,11 @@ def _is_valid_response(text):
 
 def _try_groq(prompt):
     if not GROQ_API_KEY:
-        logger.info("No GROQ_API_KEY, skipping Groq")
+        logger.warning("No GROQ_API_KEY, skipping Groq")
         return None
+    
+    logger.info("Attempting Groq API call...")
+    
     try:
         import json
         response = requests.post(
@@ -325,17 +334,31 @@ def _try_groq(prompt):
             }),
             timeout=15
         )
+        
+        logger.info(f"Groq API response status: {response.status_code}")
+        
         if response.status_code == 200:
-            data = response.json()
-            text = data["choices"][0]["message"]["content"].strip()
-            if _is_valid_response(text):
-                text = trim_to_sentence(text, max_len=250)
-                logger.info("Groq caption generated")
-                return text
-            else:
-                logger.warning(f"Groq bad response: {text[:80]}")
+            try:
+                data = response.json()
+                # Безопасное извлечение текста
+                try:
+                    text = data["choices"][0]["message"]["content"]
+                    if text and isinstance(text, str):
+                        text = text.strip()
+                        if _is_valid_response(text):
+                            text = trim_to_sentence(text, max_len=250)
+                            logger.info("Groq caption generated successfully")
+                            return text
+                        else:
+                            logger.warning(f"Groq invalid response: {text[:100]}")
+                    else:
+                        logger.warning("Groq empty content")
+                except (KeyError, IndexError, TypeError) as e:
+                    logger.error(f"Groq parse error: {e}")
+            except Exception as e:
+                logger.error(f"Groq JSON decode error: {e}")
         else:
-            logger.warning(f"Groq status {response.status_code}")
+            logger.warning(f"Groq status {response.status_code}: {response.text[:100]}")
     except Exception as e:
         logger.error(f"Groq error: {e}")
     return None
@@ -404,27 +427,36 @@ def fallback_caption(tags, footer):
 def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      watermark="📢 @eroslabai", suggestion="💬 Предложка: @Haillord"):
     footer = f"{watermark}\n{suggestion}"
-
+    
     # Пробуем vision (и для картинок, и для видео через thumbnail)
     vision_description = None
-
+    
     if image_data:
+        logger.info(f"Attempting vision with image_data ({len(image_data)} bytes)")
         vision_description = _describe_image(image_data=image_data)
     elif image_url:
+        logger.info(f"Attempting vision with image_url: {image_url[:50]}...")
         vision_description = _describe_image(image_url=image_url)
-
-    if vision_description:
-        logger.info("Using vision description for caption")
     else:
-        logger.info("Using tags for caption (no vision)")
-
+        logger.warning("No image_data or image_url provided for vision")
+    
+    if vision_description:
+        logger.info(f"Vision success: {vision_description[:100]}...")
+    else:
+        logger.info("Vision failed or returned None, using tags only")
+    
     prompt = _build_prompt(tags, vision_description)
-
+    
+    # Логируем промпт для отладки (только первые 200 символов)
+    logger.debug(f"Prompt: {prompt[:200]}...")
+    
     text = _try_groq(prompt)
     if not text:
+        logger.info("Groq failed, trying Pollinations...")
         text = _try_pollinations(prompt)
-
+    
     if not text:
+        logger.warning("All caption generators failed, using fallback")
         return fallback_caption(tags, footer)
-
+    
     return _format_caption(text, tags, footer)

@@ -520,15 +520,18 @@ async def main():
         return
 
     # ========== THUMBNAIL ДЛЯ ВИДЕО (для vision) ==========
-    caption_image_data = data
+    caption_image_data = data  # для фото — оригинал, для видео — fallback
+
     if is_video:
         thumbnail = get_video_thumbnail(data)
         if thumbnail:
             caption_image_data = thumbnail
-            logger.info("Using video thumbnail for vision caption")
+            logger.info(f"Using video thumbnail for vision caption ({len(thumbnail)} bytes)")
         else:
-            caption_image_data = None
-            logger.info("No thumbnail, using tags for caption")
+            # Если thumbnail не получился, пробуем использовать первый фрагмент видео
+            # как "изображение" (некоторые vision модели могут его обработать)
+            caption_image_data = data[:500000] if len(data) > 500000 else data
+            logger.warning(f"Thumbnail failed, using first {len(caption_image_data)} bytes of video for vision")
 
     # ========== ОТПРАВКА В TELEGRAM ==========
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
