@@ -57,6 +57,7 @@ jobs:
           R34_USER_ID: ${{ secrets.R34_USER_ID }}
           POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: python civitai_bot.py
         
       - name: Commit and push updates
