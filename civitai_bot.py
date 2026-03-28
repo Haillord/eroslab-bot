@@ -33,7 +33,6 @@ MIN_IMAGE_SIZE   = 512
 
 HISTORY_FILE = "posted_ids.json"
 HASHES_FILE  = "posted_hashes.json"
-# Максимум хранимых ID — чтобы файл не рос бесконечно
 MAX_HISTORY_SIZE = 5000
 
 BLACKLIST_TAGS = {
@@ -85,7 +84,6 @@ def clean_tags(tags):
     clean, seen = [], set()
     for t in tags:
         t = re.sub(r"[^\w]", "", str(t).strip().lower().replace(" ", "_").replace("-", "_"))
-        # Фильтруем технические теги с цифрами в конце (monochrome075, drawn2 и т.д.)
         if re.search(r'\d+$', t):
             continue
         if t and t not in HASHTAG_STOP_WORDS and t not in seen and 3 <= len(t) <= 30:
@@ -117,7 +115,6 @@ def check_media_size(data, url):
         logger.error(f"Error checking media size: {e}")
         return False
 
-
 def get_video_duration(data: bytes) -> float:
     """Возвращает длительность или 0.0 если видео битое"""
     tmp_path = None
@@ -144,7 +141,44 @@ def get_video_duration(data: bytes) -> float:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
+def get_video_thumbnail(data: bytes) -> bytes:
+    """Извлекает первый кадр видео как JPEG bytes для vision."""
+    tmp_in = None
+    tmp_out = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
+            tmp.write(data)
+            tmp_in = tmp.name
 
+        tmp_out = tmp_in + "_thumb.jpg"
+
+        cmd = [
+            'ffmpeg', '-y', '-i', tmp_in,
+            '-ss', '0', '-vframes', '1',
+            '-vf', 'scale=512:-1',
+            '-q:v', '3',
+            tmp_out
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=10)
+
+        if result.returncode != 0:
+            logger.warning("ffmpeg thumbnail extraction failed")
+            return None
+
+        with open(tmp_out, 'rb') as f:
+            thumb_data = f.read()
+
+        logger.info(f"Thumbnail extracted: {len(thumb_data)} bytes")
+        return thumb_data
+
+    except Exception as e:
+        logger.error(f"Thumbnail error: {e}")
+        return None
+    finally:
+        if tmp_in and os.path.exists(tmp_in):
+            os.unlink(tmp_in)
+        if tmp_out and os.path.exists(tmp_out):
+            os.unlink(tmp_out)
 
 # ==================== RETRY ДЛЯ TELEGRAM ====================
 async def send_with_retry(func, *args, retries=3, **kwargs):
@@ -213,15 +247,12 @@ def _request_with_backoff(url, params, headers, max_retries=3):
 
 def fetch_civitai():
     variations = [
-        # X рейтинг (6 вариантов)
         {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Day"},
         {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Week"},
         {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Month"},
         {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Day"},
         {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Week"},
         {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Month"},
-        
-        # XXX рейтинг (6 вариантов)
         {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Day"},
         {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Week"},
         {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Month"},
@@ -291,11 +322,6 @@ def fetch_civitai():
                         "source":  "civitai",
                     })
 
-                    logger.debug(
-                        f"✓ Added {item['id']} "
-                        f"(rating:{nsfw_level}, likes:{likes}, tags:{len(tags)})"
-                    )
-
                 except Exception as e:
                     logger.error(f"Error processing item {item.get('id')}: {e}")
                     continue
@@ -340,7 +366,6 @@ def _pick_by_content_type(fresh):
 
 
 def fetch_and_pick():
-    # ── 50/50 выбор источника ──────────────────────────────────────────────
     source = random.choice(["civitai", "rule34"])
     logger.info(f"Source selected: {source}")
 
@@ -368,12 +393,9 @@ def fetch_and_pick():
         logger.info("No fresh items")
         return None
 
-    # ── Для CivitAI тип контента уже выбирается внутри fetch_civitai ──────
-    # ── Для Rule34 делаем 50/50 видео/фото здесь ─────────────────────────
     if source == "rule34":
         selected = _pick_by_content_type(fresh)
     else:
-        # CivitAI: оставляем старую логику 50/50 через weighted_choice
         content_type = random.choice(['image', 'video'])
         logger.info(f"Content type selection (civitai): {content_type}")
 
@@ -450,7 +472,6 @@ async def main():
             logger.info("No more fresh posts available")
             return
 
-
         try:
             logger.info(f"Downloading: {item['url']}")
             r = requests.get(item["url"], timeout=60)
@@ -469,7 +490,9 @@ async def main():
             save_all()
             continue
 
-        if not item["url"].lower().endswith((".mp4", ".webm", ".gif")):
+        is_video = _is_video(item["url"])
+
+        if not is_video:
             if not check_media_size(data, item["url"]):
                 logger.warning("Image size too small, skipping")
                 posted_ids.add(item["id"])
@@ -496,14 +519,25 @@ async def main():
         logger.error(f"No suitable post found after {MAX_ATTEMPTS} attempts")
         return
 
-        # ========== ОТПРАВКА В TELEGRAM ==========
+    # ========== THUMBNAIL ДЛЯ ВИДЕО (для vision) ==========
+    caption_image_data = data
+    if is_video:
+        thumbnail = get_video_thumbnail(data)
+        if thumbnail:
+            caption_image_data = thumbnail
+            logger.info("Using video thumbnail for vision caption")
+        else:
+            caption_image_data = None
+            logger.info("No thumbnail, using tags for caption")
+
+    # ========== ОТПРАВКА В TELEGRAM ==========
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     caption = generate_caption(
         tags=item["tags"],
         rating=item["rating"],
         likes=item["likes"],
-        image_data=data,
-        image_url=item["url"],
+        image_data=caption_image_data,
+        image_url=item["url"] if not is_video else None,
         watermark=WATERMARK_TEXT,
         suggestion="💬 Предложка: @Haillord"
     )
@@ -512,18 +546,13 @@ async def main():
     logger.info(f"Caption preview: {caption[:100]}")
 
     try:
-        url_lower = item["url"].lower()
-        if url_lower.endswith((".mp4", ".webm", ".gif")):
+        if is_video:
             logger.info("Sending as video/gif")
-            
-            # Используем видео без оптимизации
-            video_data = data
             logger.info("Using original video (no optimization)")
-            
             await send_with_retry(
                 bot.send_video,
                 chat_id=TELEGRAM_CHANNEL_ID,
-                video=BytesIO(video_data),
+                video=BytesIO(data),
                 caption=caption,
                 supports_streaming=True,
                 write_timeout=60,
@@ -543,7 +572,7 @@ async def main():
         posted_ids.add(item["id"])
         posted_hashes.add(img_hash)
         save_all()
-        logger.info(f"✅ Successfully posted: {item['id']}")
+        logger.info(f"Successfully posted: {item['id']}")
 
     except Exception as e:
         logger.error(f"Telegram Send Error: {e}")
