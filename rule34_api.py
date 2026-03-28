@@ -1,4 +1,5 @@
 import os
+import random
 import requests
 import logging
 from typing import List, Dict, Any
@@ -9,20 +10,35 @@ R34_API_KEY = os.getenv("R34_API_KEY") or os.getenv("RULE34_API_KEY")
 
 logger = logging.getLogger("ErosLab.Rule34")
 
-def fetch_rule34(tags: str = "3d animated", limit: int = 100) -> List[Dict[str, Any]]:
+# Разнообразные наборы тегов — выбираем случайный каждый раз
+TAG_SETS = [
+    "animated",
+    "3d_(artwork)",
+    "animated 3d_(artwork)",
+    "animated tagme",
+    "3d_(artwork) tagme",
+]
+
+def fetch_rule34(tags: str = None, limit: int = 100) -> List[Dict[str, Any]]:
     """Парсинг Rule34 через API с авторизацией"""
-    
+
     # Проверка, что секреты загружены
     if not R34_USER_ID or not R34_API_KEY:
         logger.error("API credentials are missing in environment variables!")
         return []
+
+    # Если теги не заданы — выбираем случайный набор
+    if tags is None:
+        tags = random.choice(TAG_SETS)
+
+    logger.info(f"Rule34: using tags = '{tags}'")
 
     url = "https://api.rule34.xxx/index.php"
     params = {
         "page": "dapi",
         "s": "post",
         "q": "index",
-        "json": 1,  # JSON формат
+        "json": 1,
         "limit": limit,
         "tags": tags,
         "user_id": R34_USER_ID,
@@ -35,14 +51,12 @@ def fetch_rule34(tags: str = "3d animated", limit: int = 100) -> List[Dict[str, 
         r = requests.get(url, params=params, headers=headers, timeout=30)
         r.raise_for_status()
 
-        # Проверка на пустой ответ
         if not r.text.strip():
             logger.warning("Rule34 returned empty response")
             return []
 
         posts = r.json()
 
-        # Проверка формата ответа
         if not isinstance(posts, list):
             logger.error(f"Rule34 unexpected response format: {type(posts)}")
             return []

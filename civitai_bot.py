@@ -349,9 +349,9 @@ def fetch_and_pick():
         if not items:
             logger.warning("CivitAI returned nothing, falling back to Rule34")
             source = "rule34"
-            items = fetch_rule34(tags="animated+3d", limit=100)
+            items = fetch_rule34(limit=100)
     else:
-        items = fetch_rule34(tags="animated+3d", limit=100)
+        items = fetch_rule34(limit=100)
         if not items:
             logger.warning("Rule34 returned nothing, falling back to CivitAI")
             source = "civitai"
