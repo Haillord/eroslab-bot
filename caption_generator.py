@@ -1,17 +1,21 @@
 """
-Генератор описаний: Groq → Pollinations → fallback
-Стиль: циничная, провокационная, с характером. Без описания внешности напрямую.
+Генератор описаний: Vision (OpenRouter) → Groq → Pollinations → fallback
+Стиль: дерзкая альтушка-анимешница. Без описания внешности напрямую.
 """
 
 import requests
 import logging
 import random
 import urllib.parse
+import base64
 import os
 
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+
+VISION_MODEL = "nvidia/nemotron-nano-12b-v2-vl:free"
 
 
 # ==================== ФИЛЬТРЫ ====================
@@ -24,7 +28,6 @@ NSFW_TRIGGER_TAGS = {
     "spread_legs", "pussy_juice", "uncensored", "censored", "genitals"
 }
 
-# Технические теги которые не несут смысла для текста
 TECHNICAL_TAGS = {
     "3d", "3d_(artwork)", "3d_animation", "3d_model", "ai_generated",
     "tagme", "animated", "video", "gif", "source_filmmaker", "sfm",
@@ -43,31 +46,25 @@ def _safe_tags(tags):
             continue
         if t_lower in TECHNICAL_TAGS:
             continue
-        # Убираем теги длиннее 3 слов (технические описания)
         if t_lower.count("_") > 2:
             continue
-        # Убираем теги с цифрами
         if any(c.isdigit() for c in t_lower):
             continue
         result.append(t)
     return result
 
 def _prompt_tags(tags):
-    """Теги для промпта — фильтруем технический мусор, переводим в читаемый вид."""
+    """Теги для промпта — фильтруем мусор, переводим в читаемый вид."""
     result = []
     for t in tags:
         t_lower = t.lower()
         if t_lower in TECHNICAL_TAGS:
             continue
-        # Убираем теги длиннее 3 слов
         if t_lower.count("_") > 2:
             continue
-        # Убираем теги с цифрами
         if any(c.isdigit() for c in t_lower):
             continue
-        # Убираем скобки из тегов типа 3d_(artwork)
         clean = t.replace("_(artwork)", "").replace("_(character)", "")
-        # Заменяем подчёркивания на пробелы для читаемости
         human = clean.replace("_", " ").strip()
         if human:
             result.append(human)
@@ -103,27 +100,86 @@ FORMAT_TYPES = {
 }
 
 
-# ==================== ПРОМПТ ====================
+# ==================== VISION ====================
 
-def _build_prompt(tags):
-    """
-    Промпт строится из очищенных читаемых тегов.
-    NSFW-контекст передаётся через атмосферу, не через прямые слова.
-    """
-    if not tags:
+def _describe_image(image_data: bytes = None, image_url: str = None) -> str:
+    """Описывает изображение через OpenRouter vision модель."""
+    if not OPENROUTER_API_KEY:
+        logger.warning("No OPENROUTER_API_KEY, skipping vision")
         return None
 
-    human_tags = _prompt_tags(tags)
+    logger.info("Vision: attempting image description...")
 
-    if not human_tags:
-        # Если все теги технические — используем нейтральный промпт
-        tags_str = "соблазн, страсть, интрига"
-    else:
-        tags_str = ", ".join(human_tags)
+    try:
+        if image_data:
+            b64 = base64.b64encode(image_data).decode("utf-8")
+            if image_data[:4] == b'\x89PNG':
+                mime = "image/png"
+            elif image_data[:3] == b'GIF':
+                mime = "image/gif"
+            else:
+                mime = "image/jpeg"
+            img_content = {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+        elif image_url:
+            img_content = {"type": "image_url", "image_url": {"url": image_url}}
+        else:
+            logger.warning("Vision: no image data or url provided")
+            return None
 
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": VISION_MODEL,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            img_content,
+                            {"type": "text", "text": (
+                                "Describe the mood, atmosphere and setting of this image in 2-3 sentences. "
+                                "Focus on the feeling and tension, not on body parts. "
+                                "Be concise and evocative."
+                            )}
+                        ]
+                    }
+                ],
+                "max_tokens": 150
+            },
+            timeout=35
+        )
+
+        if response.status_code == 200:
+            description = response.json()["choices"][0]["message"]["content"].strip()
+            logger.info(f"Vision description: {description[:100]}")
+            return description
+        else:
+            logger.warning(f"Vision API error {response.status_code}: {response.text[:150]}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Vision error: {e}")
+        return None
+
+
+# ==================== ПРОМПТ ====================
+
+def _build_prompt(tags, vision_description=None):
     persona_line = random.choice(PERSONA)
     format_key = random.choice(list(FORMAT_TYPES.keys()))
     format_instruction = FORMAT_TYPES[format_key]
+
+    if vision_description:
+        atmosphere = f"Атмосфера от увиденного: {vision_description}"
+    else:
+        human_tags = _prompt_tags(tags)
+        if human_tags:
+            atmosphere = f"Атмосфера: {', '.join(human_tags)}"
+        else:
+            atmosphere = "Атмосфера: соблазн, страсть, интрига"
 
     prompt = f"""Ты — дерзкая альтушка-анимешница, пишешь провокационные подписи для Telegram-канала.
 Ты не просто описываешь — ты дразнишь, цепляешь и играешь с читателем.
@@ -150,7 +206,7 @@ def _build_prompt(tags):
 — первая строка — крючок (должна цеплять сразу)
 — последняя — добивающая/двусмысленная
 
-Атмосфера: {tags_str}
+{atmosphere}
 
 Формат: {format_instruction}
 
@@ -207,7 +263,7 @@ def _try_groq(prompt):
             text = data["choices"][0]["message"]["content"].strip()
             if _is_valid_response(text):
                 text = trim_to_sentence(text, max_len=250)
-                logger.info("✅ Groq caption generated")
+                logger.info("Groq caption generated")
                 return text
             else:
                 logger.warning(f"Groq bad response: {text[:80]}")
@@ -225,12 +281,8 @@ def _try_pollinations(prompt):
             text = response.text.strip()
             if _is_valid_response(text):
                 text = trim_to_sentence(text, max_len=250)
-                logger.info("✅ Pollinations GET caption generated")
+                logger.info("Pollinations GET caption generated")
                 return text
-            else:
-                logger.warning(f"Pollinations GET bad response: {text[:80]}")
-    except requests.exceptions.Timeout:
-        logger.warning("Pollinations GET timeout, trying POST...")
     except Exception as e:
         logger.warning(f"Pollinations GET failed: {e}")
 
@@ -245,18 +297,14 @@ def _try_pollinations(prompt):
             text = response.text.strip()
             if _is_valid_response(text):
                 text = trim_to_sentence(text, max_len=250)
-                logger.info("✅ Pollinations POST caption generated")
+                logger.info("Pollinations POST caption generated")
                 return text
-            else:
-                logger.warning(f"Pollinations POST bad response: {text[:80]}")
-    except requests.exceptions.Timeout:
-        logger.warning("Pollinations POST timeout")
     except Exception as e:
         logger.error(f"Pollinations POST failed: {e}")
     return None
 
 
-# ==================== FALLBACK ТЕКСТЫ ====================
+# ==================== FALLBACK ====================
 
 FALLBACK_TEXTS = [
     "Ну давай… сделай вид, что тебе не интересно 😏",
@@ -290,12 +338,22 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      watermark="📢 @eroslabai", suggestion="💬 Предложка: @Haillord"):
     footer = f"{watermark}\n{suggestion}"
 
-    if not tags:
-        return fallback_caption(tags, footer)
+    # Пробуем vision если есть картинка (не видео)
+    vision_description = None
+    is_video = image_url and image_url.lower().endswith((".mp4", ".webm", ".gif"))
 
-    prompt = _build_prompt(tags)
-    if not prompt:
-        return fallback_caption(tags, footer)
+    if not is_video:
+        if image_data:
+            vision_description = _describe_image(image_data=image_data)
+        elif image_url:
+            vision_description = _describe_image(image_url=image_url)
+
+    if vision_description:
+        logger.info("Using vision description for caption")
+    else:
+        logger.info("Using tags for caption (no vision)")
+
+    prompt = _build_prompt(tags, vision_description)
 
     text = _try_groq(prompt)
     if not text:
