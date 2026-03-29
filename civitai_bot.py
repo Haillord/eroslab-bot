@@ -22,7 +22,7 @@ from telegram import Bot
 from caption_generator import generate_caption
 from rule34_api import fetch_rule34
 from quality_filter import QualityFilter, filter_posts_by_quality
-from watermark import add_watermark, should_add_watermark, add_watermark_to_video_thumbnail
+from watermark import add_watermark, should_add_watermark
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -702,18 +702,33 @@ async def main():
 
     try:
         if is_video:
-            logger.info("Adding watermark to video thumbnail...")
-            watermarked_video_data = add_watermark_to_video_thumbnail(data, text=WATERMARK_TEXT, opacity=0.3)
-            logger.info("Sending as video/gif with watermark")
-            await send_with_retry(
-                bot.send_video,
-                chat_id=TELEGRAM_CHANNEL_ID,
-                video=BytesIO(watermarked_video_data),
-                caption=caption,
-                supports_streaming=True,
-                write_timeout=60,
-                read_timeout=60
-            )
+            logger.info("Creating video thumbnail with watermark...")
+            # Извлекаем thumbnail и накладываем на него водяной знак
+            thumbnail = get_video_thumbnail(data)
+            if thumbnail:
+                watermarked_thumbnail = add_watermark(thumbnail, text=WATERMARK_TEXT, opacity=0.3)
+                logger.info("Sending as video/gif with watermark thumbnail")
+                await send_with_retry(
+                    bot.send_video,
+                    chat_id=TELEGRAM_CHANNEL_ID,
+                    video=BytesIO(data),
+                    thumbnail=BytesIO(watermarked_thumbnail),
+                    caption=caption,
+                    supports_streaming=True,
+                    write_timeout=60,
+                    read_timeout=60
+                )
+            else:
+                logger.warning("Thumbnail extraction failed, sending video without watermark")
+                await send_with_retry(
+                    bot.send_video,
+                    chat_id=TELEGRAM_CHANNEL_ID,
+                    video=BytesIO(data),
+                    caption=caption,
+                    supports_streaming=True,
+                    write_timeout=60,
+                    read_timeout=60
+                )
         else:
             logger.info("Adding watermark to image...")
             watermarked_data = add_watermark(data, text=WATERMARK_TEXT, opacity=0.3)
