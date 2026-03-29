@@ -259,6 +259,56 @@ def _describe_image_structured(image_data: bytes = None, image_url: str = None) 
                        f"{len(details.pose)} pose, {len(details.emotions)} emotions")
             return details
             
+        except json_module.JSONDecodeError as e:
+            logger.error(f"Vision: JSON parsing error: {e}")
+            logger.warning(f"Raw content: {content[:500]}")
+            
+            # === Попробуем "дособрать" обрезанный JSON ===
+            try:
+                # Проверяем, заканчивается ли content на незавершенный JSON
+                content_stripped = content.strip()
+                
+                # Если заканчивается на запятую, точку или многоточие - возможно обрезано
+                if content_stripped.endswith((',', '.', '...')):
+                    # Попробуем добавить закрывающие скобки
+                    possible_fixes = [
+                        content_stripped + '}',
+                        content_stripped + '"]}',
+                        content_stripped + '"}',
+                        content_stripped + '"]}]'
+                    ]
+                    
+                    for fixed_content in possible_fixes:
+                        try:
+                            vision_data = json_module.loads(fixed_content)
+                            logger.info("Vision: JSON successfully fixed and parsed")
+                            
+                            details = VisionDetails()
+                            details.appearance = vision_data.get("appearance", [])
+                            details.pose = vision_data.get("pose", [])
+                            details.emotions = vision_data.get("emotions", [])
+                            details.background = vision_data.get("background", [])
+                            details.lighting = vision_data.get("lighting", [])
+                            details.props = vision_data.get("props", [])
+                            details.mood = vision_data.get("mood", [])
+                            
+                            if any([details.appearance, details.pose, details.emotions, 
+                                   details.background, details.lighting, details.props, details.mood]):
+                                logger.info(f"Vision fixed data: {len(details.appearance)} appearance, "
+                                           f"{len(details.pose)} pose, {len(details.emotions)} emotions")
+                                return details
+                                
+                        except json_module.JSONDecodeError:
+                            continue
+                
+                # Если не получилось "дособрать" - возвращаем None для fallback
+                logger.warning("Vision: JSON could not be fixed, using fallback")
+                return None
+                
+            except Exception as fix_error:
+                logger.error(f"Vision: Error while trying to fix JSON: {fix_error}")
+                return None
+                
         except Exception as e:
             logger.error(f"Vision: JSON parsing error: {e}")
             logger.warning(f"Raw content: {content[:500]}")
@@ -585,6 +635,40 @@ def _try_groq(prompt):
                         logger.warning("Groq empty content")
                 except (KeyError, IndexError, TypeError) as e:
                     logger.error(f"Groq parse error: {e}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Groq JSON decode error: {e}")
+                logger.warning(f"Groq raw response: {response.text[:500]}")
+                
+                # === Попробуем "дособрать" обрезанный JSON от Groq ===
+                try:
+                    content_stripped = response.text.strip()
+                    
+                    # Если заканчивается на запятую, точку или многоточие - возможно обрезано
+                    if content_stripped.endswith((',', '.', '...')):
+                        # Попробуем добавить закрывающие скобки
+                        possible_fixes = [
+                            content_stripped + '}',
+                            content_stripped + '"]}',
+                            content_stripped + '"}',
+                            content_stripped + '"]}]'
+                        ]
+                        
+                        for fixed_content in possible_fixes:
+                            try:
+                                fixed_data = json.loads(fixed_content)
+                                text = fixed_data["choices"][0]["message"]["content"]
+                                if text and isinstance(text, str):
+                                    text = text.strip()
+                                    if _is_valid_response(text):
+                                        text = trim_to_sentence(text, max_len=250)
+                                        logger.info("Groq caption generated successfully (fixed JSON)")
+                                        return text
+                            except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+                                continue
+                
+                except Exception as fix_error:
+                    logger.error(f"Groq: Error while trying to fix JSON: {fix_error}")
+                    
             except Exception as e:
                 logger.error(f"Groq JSON decode error: {e}")
                 logger.warning(f"Groq raw response: {response.text[:500]}")
