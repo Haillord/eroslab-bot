@@ -377,7 +377,7 @@ def _pick_by_content_type(fresh):
 
 
 def fetch_and_pick_with_quality():
-    """Выбор поста с фильтром качества"""
+    """Выбор поста с фильтром качества (только для картинок)"""
     source = random.choice(["civitai", "rule34"])
     logger.info(f"Source selected: {source}")
 
@@ -405,63 +405,101 @@ def fetch_and_pick_with_quality():
         logger.info("No fresh items")
         return None
 
-    # Скачиваем изображения для анализа качества
-    logger.info("Downloading images for quality analysis...")
-    quality_filter = QualityFilter(min_score=7.0)
-    valid_posts = []
-    image_data_list = []
+    # Разделяем посты на видео и картинки
+    video_posts = []
+    image_posts = []
     
-    for item in fresh[:20]:  # Анализируем первые 20 постов
+    for item in fresh:
+        if _is_video(item["url"]):
+            video_posts.append(item)
+        else:
+            image_posts.append(item)
+    
+    logger.info(f"Found {len(video_posts)} videos and {len(image_posts)} images")
+    
+    # Если есть видео - выбираем случайное видео (без QualityFilter)
+    if video_posts:
+        selected_video = random.choice(video_posts)
+        logger.info(f"Selected video: {selected_video['id']} (no quality filter)")
+        
         try:
-            logger.info(f"Downloading for quality check: {item['url']}")
-            r = requests.get(item["url"], timeout=30)
+            logger.info(f"Downloading video: {selected_video['url']}")
+            r = requests.get(selected_video["url"], timeout=30)
             r.raise_for_status()
             data = r.content
             
-            # Проверяем размер
-            if len(data) > 50 * 1024 * 1024:  # 50MB
-                logger.info(f"Post {item['id']} too large, skipping quality check")
-                continue
-            
-            # Проверяем тип контента
-            is_video = _is_video(item["url"])
-            if is_video:
-                duration = get_video_duration(data)
-                if duration < 0.5 or duration > 60:
-                    logger.info(f"Post {item['id']} video duration out of range, skipping")
-                    continue
-            
-            # Проверяем дубликаты
-            img_hash = hashlib.sha256(data).hexdigest()
-            if img_hash in posted_hashes:
-                logger.info(f"Post {item['id']} duplicate content, skipping")
-                continue
-            
-            valid_posts.append(item)
-            image_data_list.append(data)
-            logger.info(f"Post {item['id']} ready for quality analysis")
-            
+            duration = get_video_duration(data)
+            if duration < 0.5 or duration > 60:
+                logger.info(f"Video {selected_video['id']} duration out of range, trying next")
+                # Если видео не подходит, пробуем другое
+                for video in video_posts:
+                    if video["id"] == selected_video["id"]:
+                        continue
+                    try:
+                        r = requests.get(video["url"], timeout=30)
+                        r.raise_for_status()
+                        data = r.content
+                        duration = get_video_duration(data)
+                        if 0.5 <= duration <= 60:
+                            logger.info(f"Selected video: {video['id']}")
+                            return video, data
+                    except:
+                        continue
+                logger.info("No suitable videos found")
+            else:
+                return selected_video, data
+                
         except Exception as e:
-            logger.warning(f"Failed to download {item['id']}: {e}")
-            continue
+            logger.warning(f"Failed to download video {selected_video['id']}: {e}")
     
-    if not valid_posts:
-        logger.warning("No valid posts for quality analysis")
-        return None
+    # Если видео нет или не удалось скачать - анализируем картинки
+    if image_posts:
+        logger.info("Analyzing images with QualityFilter...")
+        quality_filter = QualityFilter(min_score=6.0)  # Строгий порог для картинок
+        valid_posts = []
+        image_data_list = []
+        
+        for item in image_posts[:20]:  # Анализируем первые 20 картинок
+            try:
+                logger.info(f"Downloading for quality check: {item['url']}")
+                r = requests.get(item["url"], timeout=30)
+                r.raise_for_status()
+                data = r.content
+                
+                # Проверяем размер
+                if len(data) > 50 * 1024 * 1024:  # 50MB
+                    logger.info(f"Post {item['id']} too large, skipping quality check")
+                    continue
+                
+                # Проверяем дубликаты
+                img_hash = hashlib.sha256(data).hexdigest()
+                if img_hash in posted_hashes:
+                    logger.info(f"Post {item['id']} duplicate content, skipping")
+                    continue
+                
+                valid_posts.append(item)
+                image_data_list.append(data)
+                logger.info(f"Post {item['id']} ready for quality analysis")
+                
+            except Exception as e:
+                logger.warning(f"Failed to download {item['id']}: {e}")
+                continue
+        
+        if valid_posts:
+            logger.info(f"Analyzing quality of {len(valid_posts)} images...")
+            selected_post, selected_image_data, quality_result = filter_posts_by_quality(
+                valid_posts, image_data_list, min_score=6.0
+            )
+            
+            if selected_post:
+                logger.info(f"Quality filter passed: {selected_post['id']} (score: {quality_result['score']})")
+                return selected_post, selected_image_data
+            else:
+                logger.warning("No images passed quality filter")
     
-    # Фильтруем по качеству
-    logger.info(f"Analyzing quality of {len(valid_posts)} posts...")
-    selected_post, selected_image_data, quality_result = filter_posts_by_quality(
-        valid_posts, image_data_list, min_score=7.0
-    )
-    
-    if selected_post:
-        logger.info(f"Quality filter passed: {selected_post['id']} (score: {quality_result['score']})")
-        return selected_post, selected_image_data
-    else:
-        logger.warning("No posts passed quality filter, using fallback selection")
-        # Fallback к старому методу
-        return fetch_and_pick(), None
+    logger.warning("No suitable posts found, using fallback selection")
+    # Fallback к старому методу
+    return fetch_and_pick(), None
 
 def fetch_and_pick():
     source = random.choice(["civitai", "rule34"])
