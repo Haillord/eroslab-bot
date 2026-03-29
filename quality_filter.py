@@ -15,13 +15,17 @@ logger = logging.getLogger(__name__)
 class QualityFilter:
     """Фильтр качества изображений"""
     
-    def __init__(self, min_resolution=512, min_score=7.0):
+    def __init__(self, min_resolution=512, min_score=4.0):
         self.min_resolution = min_resolution
         self.min_score = min_score
     
     def analyze_image(self, image_data: bytes) -> dict:
         """Полный анализ качества изображения"""
         try:
+            # Проверяем, является ли файл видео
+            if self._is_video_file(image_data):
+                return self._analyze_video(image_data)
+            
             # Загружаем изображение
             image = Image.open(io.BytesIO(image_data))
             width, height = image.size
@@ -191,8 +195,84 @@ class QualityFilter:
             score = 4.0  # Базовая оценка при ошибке
         
         return min(score, 10.0)
+    
+    def _is_video_file(self, image_data: bytes) -> bool:
+        """Проверяем, является ли файл видео"""
+        try:
+            # Проверяем сигнатуры видеофайлов
+            if len(image_data) < 12:
+                return False
+            
+            # MP4 сигнатура
+            if image_data[:4] == b'\x00\x00\x00\x20' and b'ftyp' in image_data[:12]:
+                return True
+            
+            # WebM сигнатура
+            if image_data[:4] == b'\x1a\x45\xdf\xa3':
+                return True
+            
+            # GIF может быть анимированным
+            if image_data[:6] == b'GIF89a':
+                return True
+            
+            return False
+        except:
+            return False
+    
+    def _analyze_video(self, video_data: bytes) -> dict:
+        """Анализ качества видео"""
+        try:
+            # Базовая проверка размера
+            size_mb = len(video_data) / (1024 * 1024)
+            
+            # Проверяем длительность (если можем извлечь)
+            # Для упрощения - просто проверяем размер
+            score = 0.0
+            
+            # 1. Размер файла
+            if size_mb > 10:
+                score += 4.0
+            elif size_mb > 5:
+                score += 3.0
+            elif size_mb > 1:
+                score += 2.0
+            elif size_mb > 0.5:
+                score += 1.0
+            else:
+                score += 0.0
+            
+            # 2. Формат (предполагаем, что если дошли сюда - формат поддерживается)
+            score += 3.0
+            
+            # 3. Визуальная привлекательность (через Vision)
+            visual_score = self._analyze_visual(video_data[:500000])  # Первые 500KB для анализа
+            score += visual_score / 2.5  # Нормализуем
+            
+            # 4. Общая оценка
+            total_score = min(score, 10.0)
+            
+            result = {
+                'score': round(total_score, 1),
+                'pass': total_score >= self.min_score,
+                'technical_score': min(score, 10.0),
+                'visual_score': visual_score,
+                'composition_score': 5.0,  # Для видео не анализируем композицию
+                'resolution': f"Video ({size_mb:.1f}MB)",
+                'reasons': []
+            }
+            
+            logger.info(f"Video quality analysis: {result['score']}/10 ({result['resolution']})")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Video analysis failed: {e}")
+            return {
+                'score': 0.0,
+                'pass': False,
+                'reasons': [f"Ошибка анализа видео: {str(e)}"]
+            }
 
-def filter_posts_by_quality(posts, image_data_list, min_score=7.0):
+def filter_posts_by_quality(posts, image_data_list, min_score=4.0):
     """Фильтрация постов по качеству"""
     quality_filter = QualityFilter(min_score=min_score)
     
