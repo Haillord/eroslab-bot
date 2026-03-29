@@ -108,6 +108,163 @@ FORMAT_TYPES = {
 
 # ==================== VISION ====================
 
+class VisionDetails:
+    """Структурированные данные от Vision-модели"""
+    def __init__(self):
+        self.appearance = []      # детали внешности
+        self.pose = []            # поза и жесты
+        self.emotions = []        # эмоции и выражение лица
+        self.background = []      # фон и окружение
+        self.lighting = []        # свет и освещение
+        self.props = []           # props и реквизит
+        self.mood = []            # общая атмосфера и настроение
+
+def _describe_image_structured(image_data: bytes = None, image_url: str = None) -> VisionDetails:
+    """Получает структурированные данные от Vision-модели"""
+    
+    if not OPENROUTER_API_KEY:
+        logger.warning("Vision: no OPENROUTER_API_KEY, skipping")
+        return None
+
+    if not image_data and not image_url:
+        logger.warning("Vision: no image data or url provided")
+        return None
+
+    logger.info("Vision: attempting structured analysis...")
+
+    try:
+        # === Формируем image content ===
+        if image_data:
+            try:
+                b64 = base64.b64encode(image_data).decode("utf-8")
+
+                if image_data.startswith(b'\x89PNG'):
+                    mime = "image/png"
+                elif image_data.startswith(b'GIF'):
+                    mime = "image/gif"
+                else:
+                    mime = "image/jpeg"
+
+                img_content = {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime};base64,{b64}"
+                    }
+                }
+
+            except Exception as e:
+                logger.error(f"Vision: base64 encoding failed: {e}")
+                return None
+
+        else:
+            img_content = {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url
+                }
+            }
+
+        # === Запрос с structured prompt ===
+        structured_prompt = (
+            "Проанализируй изображение и выдели следующие элементы:\n"
+            "1. Внешность: цвет волос, глаз, одежда, аксессуары\n"
+            "2. Поза: положение тела, жесты, поза\n"
+            "3. Эмоции: выражение лица, настроение персонажа\n"
+            "4. Фон: окружение, интерьер/экстерьер, детали\n"
+            "5. Свет: тип освещения, тени, блики\n"
+            "6. Props: предметы, реквизит, атрибуты\n"
+            "7. Атмосфера: общее настроение сцены\n\n"
+            "Ответ дай в формате JSON с полями: appearance, pose, emotions, background, lighting, props, mood.\n"
+            "Каждое поле - массив из 2-3 кратких описательных фраз на русском языке.\n"
+            "Избегай прямых упоминаний эротики, делай акцент на визуальных деталях и атмосфере."
+        )
+
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": VISION_MODEL,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            img_content,
+                            {
+                                "type": "text",
+                                "text": structured_prompt
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 300
+            },
+            timeout=25
+        )
+
+        logger.info(f"Vision status: {response.status_code}")
+
+        if response.status_code != 200:
+            logger.warning(f"Vision API error {response.status_code}: {response.text[:200]}")
+            return None
+
+        # === Безопасный разбор ===
+        try:
+            data = response.json()
+        except Exception as e:
+            logger.error(f"Vision: JSON decode error: {e}")
+            return None
+
+        choices = data.get("choices")
+        if not choices:
+            logger.warning("Vision: no choices in response")
+            return None
+
+        message = choices[0].get("message", {})
+        content = message.get("content")
+
+        if not content or not isinstance(content, str):
+            logger.warning("Vision: empty or invalid content")
+            return None
+
+        # === Парсим JSON ответ ===
+        try:
+            import json as json_module
+            vision_data = json_module.loads(content.strip())
+            
+            details = VisionDetails()
+            details.appearance = vision_data.get("appearance", [])
+            details.pose = vision_data.get("pose", [])
+            details.emotions = vision_data.get("emotions", [])
+            details.background = vision_data.get("background", [])
+            details.lighting = vision_data.get("lighting", [])
+            details.props = vision_data.get("props", [])
+            details.mood = vision_data.get("mood", [])
+            
+            # Фильтр пустых списков
+            if not any([details.appearance, details.pose, details.emotions, 
+                       details.background, details.lighting, details.props, details.mood]):
+                logger.warning("Vision: no structured data extracted")
+                return None
+                
+            logger.info(f"Vision structured data: {len(details.appearance)} appearance, "
+                       f"{len(details.pose)} pose, {len(details.emotions)} emotions")
+            return details
+            
+        except Exception as e:
+            logger.error(f"Vision: JSON parsing error: {e}")
+            return None
+
+    except requests.exceptions.Timeout:
+        logger.warning("Vision: request timeout")
+        return None
+
+    except Exception as e:
+        logger.error(f"Vision error: {e}")
+        return None
+
 def _describe_image(image_data: bytes = None, image_url: str = None) -> str:
     """Описывает изображение через OpenRouter vision модель (устойчиво к ошибкам)."""
 
@@ -240,19 +397,13 @@ def _describe_image(image_data: bytes = None, image_url: str = None) -> str:
 
 # ==================== ПРОМПТ ====================
 
-def _build_prompt(tags, vision_description=None):
+def _build_prompt(tags, vision_description=None, vision_details=None):
     persona_line = random.choice(PERSONA)
     format_key = random.choice(list(FORMAT_TYPES.keys()))
     format_instruction = FORMAT_TYPES[format_key]
 
-    if vision_description:
-        atmosphere = f"Атмосфера от увиденного: {vision_description}"
-    else:
-        human_tags = _prompt_tags(tags)
-        if human_tags:
-            atmosphere = f"Атмосфера: {', '.join(human_tags)}"
-        else:
-            atmosphere = "Атмосфера: соблазн, страсть, интрига"
+    # Формируем атмосферу на основе Vision-данных
+    atmosphere = _build_atmosphere(tags, vision_description, vision_details)
 
     prompt = f"""Ты — дерзкая альтушка-анимешница, пишешь провокационные подписи для Telegram-канала.
 Ты не просто описываешь — ты дразнишь, цепляешь и играешь с читателем.
@@ -286,6 +437,67 @@ def _build_prompt(tags, vision_description=None):
 Добавь 1–2 эмодзи, не больше. Только текст, без пояснений."""
 
     return prompt
+
+def _build_atmosphere(tags, vision_description=None, vision_details=None):
+    """Строит атмосферу на основе Vision-данных и тегов"""
+    
+    if vision_details and isinstance(vision_details, VisionDetails):
+        # Используем структурированные Vision-данные
+        atmosphere_parts = []
+        
+        # Детали внешности
+        if vision_details.appearance:
+            appearance_str = ", ".join(vision_details.appearance[:2])
+            atmosphere_parts.append(f"Внешность: {appearance_str}")
+        
+        # Поза и жесты
+        if vision_details.pose:
+            pose_str = ", ".join(vision_details.pose[:2])
+            atmosphere_parts.append(f"Поза: {pose_str}")
+        
+        # Эмоции
+        if vision_details.emotions:
+            emotion_str = ", ".join(vision_details.emotions[:2])
+            atmosphere_parts.append(f"Эмоции: {emotion_str}")
+        
+        # Фон
+        if vision_details.background:
+            bg_str = ", ".join(vision_details.background[:2])
+            atmosphere_parts.append(f"Фон: {bg_str}")
+        
+        # Свет
+        if vision_details.lighting:
+            light_str = ", ".join(vision_details.lighting[:2])
+            atmosphere_parts.append(f"Свет: {light_str}")
+        
+        # Props
+        if vision_details.props:
+            props_str = ", ".join(vision_details.props[:2])
+            atmosphere_parts.append(f"Реквизит: {props_str}")
+        
+        # Общая атмосфера
+        if vision_details.mood:
+            mood_str = ", ".join(vision_details.mood[:2])
+            atmosphere_parts.append(f"Настроение: {mood_str}")
+        
+        # Добавляем теги для контекста
+        human_tags = _prompt_tags(tags)
+        if human_tags:
+            tags_str = ", ".join(human_tags[:3])
+            atmosphere_parts.append(f"Теги: {tags_str}")
+        
+        if atmosphere_parts:
+            return "Детали сцены:\n" + "\n".join(atmosphere_parts)
+    
+    # Fallback к старому поведению
+    if vision_description:
+        return f"Атмосфера от увиденного: {vision_description}"
+    
+    human_tags = _prompt_tags(tags)
+    if human_tags:
+        return f"Атмосфера: {', '.join(human_tags)}"
+    
+    return "Атмосфера: соблазн, страсть, интрига"
 
 
 # ==================== ВАЛИДАЦИЯ ====================
@@ -428,24 +640,38 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      watermark="📢 @eroslabai", suggestion="💬 Предложка: @Haillord"):
     footer = f"{watermark}\n{suggestion}"
     
-    # Пробуем vision (и для картинок, и для видео через thumbnail)
+    # Пробуем структурированный vision анализ
+    vision_details = None
     vision_description = None
     
     if image_data:
-        logger.info(f"Attempting vision with image_data ({len(image_data)} bytes)")
-        vision_description = _describe_image(image_data=image_data)
+        logger.info(f"Attempting structured vision with image_data ({len(image_data)} bytes)")
+        vision_details = _describe_image_structured(image_data=image_data)
+        if not vision_details:
+            # Fallback к простому описанию
+            logger.info("Structured vision failed, trying simple description")
+            vision_description = _describe_image(image_data=image_data)
     elif image_url:
-        logger.info(f"Attempting vision with image_url: {image_url[:50]}...")
-        vision_description = _describe_image(image_url=image_url)
+        logger.info(f"Attempting structured vision with image_url: {image_url[:50]}...")
+        vision_details = _describe_image_structured(image_url=image_url)
+        if not vision_details:
+            # Fallback к простому описанию
+            logger.info("Structured vision failed, trying simple description")
+            vision_description = _describe_image(image_url=image_url)
     else:
         logger.warning("No image_data or image_url provided for vision")
     
-    if vision_description:
-        logger.info(f"Vision success: {vision_description[:100]}...")
+    # Логируем результаты vision анализа
+    if vision_details:
+        logger.info(f"Vision structured data: {len(vision_details.appearance)} appearance, "
+                   f"{len(vision_details.pose)} pose, {len(vision_details.emotions)} emotions")
+    elif vision_description:
+        logger.info(f"Vision simple description: {vision_description[:100]}...")
     else:
-        logger.info("Vision failed or returned None, using tags only")
+        logger.info("Vision failed completely, using tags only")
     
-    prompt = _build_prompt(tags, vision_description)
+    # Формируем промпт с приоритетом структурированных данных
+    prompt = _build_prompt(tags, vision_description, vision_details)
     
     # Логируем промпт для отладки (только первые 200 символов)
     logger.debug(f"Prompt: {prompt[:200]}...")
