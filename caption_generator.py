@@ -210,11 +210,17 @@ def _describe_image_structured(image_data: bytes = None, image_url: str = None) 
             logger.warning(f"Vision API error {response.status_code}: {response.text[:200]}")
             return None
 
+        # === Проверяем что ответ не пустой ===
+        if not response.text.strip():
+            logger.warning("Vision: Empty response received")
+            return None
+
         # === Безопасный разбор ===
         try:
             data = response.json()
         except Exception as e:
             logger.error(f"Vision: JSON decode error: {e}")
+            logger.warning(f"Raw response: {response.text[:500]}")
             return None
 
         choices = data.get("choices")
@@ -255,6 +261,7 @@ def _describe_image_structured(image_data: bytes = None, image_url: str = None) 
             
         except Exception as e:
             logger.error(f"Vision: JSON parsing error: {e}")
+            logger.warning(f"Raw content: {content[:500]}")
             return None
 
     except requests.exceptions.Timeout:
@@ -347,11 +354,17 @@ def _describe_image(image_data: bytes = None, image_url: str = None) -> str:
             logger.warning(f"Vision API error {response.status_code}: {response.text[:200]}")
             return None
 
+        # === Проверяем что ответ не пустой ===
+        if not response.text.strip():
+            logger.warning("Vision: Empty response received")
+            return None
+
         # === Безопасный разбор ===
         try:
             data = response.json()
         except Exception as e:
             logger.error(f"Vision: JSON decode error: {e}")
+            logger.warning(f"Raw response: {response.text[:500]}")
             return None
 
         choices = data.get("choices")
@@ -550,6 +563,11 @@ def _try_groq(prompt):
         logger.info(f"Groq API response status: {response.status_code}")
         
         if response.status_code == 200:
+            # === Проверяем что ответ не пустой ===
+            if not response.text.strip():
+                logger.warning("Groq: Empty response received")
+                return None
+            
             try:
                 data = response.json()
                 # Безопасное извлечение текста
@@ -569,6 +587,7 @@ def _try_groq(prompt):
                     logger.error(f"Groq parse error: {e}")
             except Exception as e:
                 logger.error(f"Groq JSON decode error: {e}")
+                logger.warning(f"Groq raw response: {response.text[:500]}")
         else:
             logger.warning(f"Groq status {response.status_code}: {response.text[:100]}")
     except Exception as e:
@@ -580,6 +599,11 @@ def _try_pollinations(prompt):
         encoded = urllib.parse.quote(prompt)
         response = requests.get(f"https://text.pollinations.ai/{encoded}", timeout=20)
         if response.status_code == 200:
+            # === Проверяем что ответ не пустой ===
+            if not response.text.strip():
+                logger.warning("Pollinations GET: Empty response received")
+                return None
+            
             text = response.text.strip()
             if _is_valid_response(text):
                 text = trim_to_sentence(text, max_len=250)
@@ -596,6 +620,11 @@ def _try_pollinations(prompt):
             timeout=20
         )
         if response.status_code == 200:
+            # === Проверяем что ответ не пустой ===
+            if not response.text.strip():
+                logger.warning("Pollinations POST: Empty response received")
+                return None
+            
             text = response.text.strip()
             if _is_valid_response(text):
                 text = trim_to_sentence(text, max_len=250)
