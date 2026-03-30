@@ -249,6 +249,7 @@ def _describe_image_structured(image_data: bytes = None, image_url: str = None) 
             },
             json={
                 "model": VISION_MODEL,
+                "response_format": {"type": "json_object"},
                 "messages": [
                     {
                         "role": "user",
