@@ -28,8 +28,8 @@ TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "@eroslabai")
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 
 WATERMARK_TEXT   = "@eroslabai"
-MIN_LIKES        = 20
-MIN_IMAGE_SIZE   = 512
+MIN_LIKES        = 10
+MIN_IMAGE_SIZE   = 720
 
 # Временно отключить Rule34 (True = только CivitAI для тестов)
 TEST_CIVITAI_ONLY = False
@@ -40,9 +40,17 @@ CONTENT_STATE_FILE = "content_state.json"
 MAX_HISTORY_SIZE = 5000
 
 BLACKLIST_TAGS = {
+    # Gore/violence
     "gore", "guro", "scat", "vore", "snuff", "necrophilia",
-    "bestiality", "zoo", "loli", "shota", "child", "minor",
-    "underage", "infant", "toddler", "1boy",
+    # Bestiality
+    "bestiality", "zoo",
+    # Age restrictions
+    "loli", "shota", "child", "minor", "underage", "infant", "toddler",
+    # Gay content (male-only)
+    "gay", "yaoi", "bara", "2boys", "3boys", "multiple_boys",
+    "male_only", "male_male", "gay_male", "bl", "boy_love",
+    # Other
+    "1boy", "furry", "furry_male", "anthro",
 }
 
 HASHTAG_STOP_WORDS = {
