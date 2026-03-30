@@ -23,6 +23,7 @@ from caption_generator import generate_caption
 from rule34_api import fetch_rule34
 from quality_filter import QualityFilter, filter_posts_by_quality
 from watermark import add_watermark, should_add_watermark
+from rule34gen import fetch_rule34gen
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -355,11 +356,11 @@ def _pick_by_content_type(fresh):
     logger.info(f"Content type selection: {content_type}")
 
     if content_type == 'video':
-        typed = [i for i in fresh if _is_video(i["url"])]
-        fallback = [i for i in fresh if not _is_video(i["url"])]
+        typed = [i for i in fresh if _is_video(i.get("url", ""))]
+        fallback = [i for i in fresh if not _is_video(i.get("url", ""))]
     else:
-        typed = [i for i in fresh if not _is_video(i["url"])]
-        fallback = [i for i in fresh if _is_video(i["url"])]
+        typed = [i for i in fresh if not _is_video(i.get("url", ""))]
+        fallback = [i for i in fresh if _is_video(i.get("url", ""))]
 
     logger.info(f"Items of selected type ({content_type}): {len(typed)}")
 
@@ -373,21 +374,32 @@ def _pick_by_content_type(fresh):
 
 def fetch_and_pick_with_quality():
     """Выбор поста с фильтром качества (только для картинок)"""
-    source = random.choice(["civitai", "rule34"])
+    sources = ["civitai", "rule34", "rule34gen"]
+    source = random.choice(sources)
     logger.info(f"Source selected: {source}")
+
+    items = []
 
     if source == "civitai":
         items = fetch_civitai()
         if not items:
             logger.warning("CivitAI returned nothing, falling back to Rule34")
-            source = "rule34"
             items = fetch_rule34(limit=100)
-    else:
+
+    elif source == "rule34":
         items = fetch_rule34(limit=100)
         if not items:
             logger.warning("Rule34 returned nothing, falling back to CivitAI")
-            source = "civitai"
             items = fetch_civitai()
+
+    elif source == "rule34gen":
+        items = fetch_rule34gen(
+            limit=70,
+            sort=random.choice(["newest", "popular", "most-viewed"])
+        )
+        if not items:
+            logger.warning("Rule34Gen returned nothing, falling back to Rule34")
+            items = fetch_rule34(limit=100)
 
     if not items:
         logger.warning("No items found from any source")
@@ -401,112 +413,86 @@ def fetch_and_pick_with_quality():
         return None
 
     # Разделяем посты на видео и картинки
-    video_posts = []
-    image_posts = []
-    
-    for item in fresh:
-        if _is_video(item["url"]):
-            video_posts.append(item)
-        else:
-            image_posts.append(item)
+    video_posts = [i for i in fresh if _is_video(i.get("url", ""))]
+    image_posts = [i for i in fresh if not _is_video(i.get("url", ""))]
     
     logger.info(f"Found {len(video_posts)} videos and {len(image_posts)} images")
     
-    # 50/50: выбираем тип контента
+    # 50/50 предпочтение
     prefer_video = random.choice([True, False])
     logger.info(f"Content type preference: {'video' if prefer_video else 'image'}")
     
-    # Если предпочли картинку — сразу идём к картинкам
     if not prefer_video and image_posts:
-        logger.info("Skipping video, going straight to images")
-        video_posts = []  # сбрасываем, чтобы перейти к блоку картинок
+        logger.info("Prefer image → skipping video section")
+        video_posts = []
     
-    # Если есть видео - выбираем случайное видео (без QualityFilter)
+    # Пытаемся взять видео
     if video_posts:
         selected_video = random.choice(video_posts)
-        logger.info(f"Selected video: {selected_video['id']} (no quality filter)")
+        logger.info(f"Selected video: {selected_video['id']}")
         
         try:
-            logger.info(f"Downloading video: {selected_video['url']}")
             r = requests.get(selected_video["url"], timeout=30)
             r.raise_for_status()
             data = r.content
             
             duration = get_video_duration(data)
-            if duration < 0.5 or duration > 60:
-                logger.info(f"Video {selected_video['id']} duration out of range, trying next")
-                # Если видео не подходит, пробуем другое
-                for video in video_posts:
-                    if video["id"] == selected_video["id"]:
-                        continue
-                    try:
-                        r = requests.get(video["url"], timeout=30)
-                        r.raise_for_status()
-                        data = r.content
-                        duration = get_video_duration(data)
-                        if 0.5 <= duration <= 60:
-                            logger.info(f"Selected video: {video['id']}")
-                            return video, data
-                    except:
-                        continue
-                logger.info("No suitable videos found")
-            else:
+            if 0.5 <= duration <= 60:
                 return selected_video, data
-                
+            
+            # Пробуем другие видео
+            for video in video_posts:
+                if video["id"] == selected_video["id"]:
+                    continue
+                try:
+                    r = requests.get(video["url"], timeout=30)
+                    r.raise_for_status()
+                    data = r.content
+                    if 0.5 <= get_video_duration(data) <= 60:
+                        logger.info(f"Selected alternative video: {video['id']}")
+                        return video, data
+                except:
+                    continue
         except Exception as e:
-            logger.warning(f"Failed to download video {selected_video['id']}: {e}")
-    
-    # Если видео нет или не удалось скачать - анализируем картинки
+            logger.warning(f"Video download failed {selected_video['id']}: {e}")
+
+    # Если видео не получилось — идём к картинкам через QualityFilter
     if image_posts:
         logger.info("Analyzing images with QualityFilter...")
-        quality_filter = QualityFilter(min_score=6.0)  # Строгий порог для картинок
         valid_posts = []
         image_data_list = []
         
-        for item in image_posts[:20]:  # Анализируем первые 20 картинок
+        for item in image_posts[:20]:
             try:
-                logger.info(f"Downloading for quality check: {item['url']}")
                 r = requests.get(item["url"], timeout=30)
                 r.raise_for_status()
                 data = r.content
                 
-                # Проверяем размер
-                if len(data) > 50 * 1024 * 1024:  # 50MB
-                    logger.info(f"Post {item['id']} too large, skipping quality check")
+                if len(data) > 50 * 1024 * 1024:
                     continue
-                
-                # Проверяем дубликаты
-                img_hash = hashlib.sha256(data).hexdigest()
-                if img_hash in posted_hashes:
-                    logger.info(f"Post {item['id']} duplicate content, skipping")
+                if hashlib.sha256(data).hexdigest() in posted_hashes:
                     continue
                 
                 valid_posts.append(item)
                 image_data_list.append(data)
-                logger.info(f"Post {item['id']} ready for quality analysis")
-                
             except Exception as e:
-                logger.warning(f"Failed to download {item['id']}: {e}")
+                logger.warning(f"Download failed {item['id']}: {e}")
                 continue
         
         if valid_posts:
-            logger.info(f"Analyzing quality of {len(valid_posts)} images...")
             selected_post, selected_image_data, quality_result = filter_posts_by_quality(
                 valid_posts, image_data_list, min_score=6.0
             )
-            
             if selected_post:
-                logger.info(f"Quality filter passed: {selected_post['id']} (score: {quality_result['score']})")
+                logger.info(f"Quality filter passed: {selected_post['id']}")
                 return selected_post, selected_image_data
-            else:
-                logger.warning("No images passed quality filter")
-    
-    logger.warning("No suitable posts found, using fallback selection")
-    # Fallback к старому методу
+
+    logger.warning("No suitable posts found, using fallback")
     return fetch_and_pick(), None
 
 def fetch_and_pick():
-    source = random.choice(["civitai", "rule34"])
+    sources = ["civitai", "rule34", "rule34gen"]
+    source = random.choice(sources)
     logger.info(f"Source selected: {source}")
 
     if source == "civitai":
@@ -515,12 +501,22 @@ def fetch_and_pick():
             logger.warning("CivitAI returned nothing, falling back to Rule34")
             source = "rule34"
             items = fetch_rule34(limit=100)
-    else:
+
+    elif source == "rule34":
         items = fetch_rule34(limit=100)
         if not items:
             logger.warning("Rule34 returned nothing, falling back to CivitAI")
             source = "civitai"
             items = fetch_civitai()
+
+    elif source == "rule34gen":
+        items = fetch_rule34gen(
+            limit=70,
+            sort=random.choice(["newest", "popular", "most-viewed"])
+        )
+        if not items:
+            logger.warning("Rule34Gen returned nothing, falling back to Rule34")
+            items = fetch_rule34(limit=100)
 
     if not items:
         logger.warning("No items found from any source")
