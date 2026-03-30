@@ -636,7 +636,7 @@ async def main():
                 chat_id=TELEGRAM_CHANNEL_ID,
                 video=BytesIO(data),
                 caption=caption,
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 supports_streaming=True,
                 write_timeout=60,
                 read_timeout=60
@@ -648,7 +648,7 @@ async def main():
                 chat_id=TELEGRAM_CHANNEL_ID,
                 animation=BytesIO(data),
                 caption=caption,
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 write_timeout=60,
                 read_timeout=60
             )
@@ -659,7 +659,7 @@ async def main():
                 chat_id=TELEGRAM_CHANNEL_ID,
                 photo=BytesIO(data),
                 caption=caption,
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 write_timeout=60,
                 read_timeout=60
             )

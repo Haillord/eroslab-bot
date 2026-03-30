@@ -693,9 +693,11 @@ def fallback_caption(tags, footer, content_header=None):
 def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      watermark="📢 @eroslabai", suggestion="💬 Предложка: @Haillord",
                      content_type="ai"):
-    # Делаем "Предложка" кликабельной ссылкой на профиль
-    clickable_suggestion = f"💬 [Предложка](tg://resolve?domain=Haillord)"
-    footer = f"{watermark}\n{clickable_suggestion}"
+    # Экранируем специальные HTML-символы в watermark
+    safe_watermark = watermark.replace("&", "&").replace("<", "<").replace(">", ">")
+    # Используем HTML-ссылку для "Предложка"
+    clickable_suggestion = '💬 <a href="https://t.me/Haillord">Предложка</a>'
+    footer = f"{safe_watermark}\n{clickable_suggestion}"
     
     # Форматируем тип контента с цветными кружками
     if content_type == "ai":
