@@ -418,6 +418,15 @@ def fetch_and_pick_with_quality():
     
     logger.info(f"Found {len(video_posts)} videos and {len(image_posts)} images")
     
+    # 50/50: выбираем тип контента
+    prefer_video = random.choice([True, False])
+    logger.info(f"Content type preference: {'video' if prefer_video else 'image'}")
+    
+    # Если предпочли картинку — сразу идём к картинкам
+    if not prefer_video and image_posts:
+        logger.info("Skipping video, going straight to images")
+        video_posts = []  # сбрасываем, чтобы перейти к блоку картинок
+    
     # Если есть видео - выбираем случайное видео (без QualityFilter)
     if video_posts:
         selected_video = random.choice(video_posts)
