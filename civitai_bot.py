@@ -23,7 +23,6 @@ from caption_generator import generate_caption
 from rule34_api import fetch_rule34
 from quality_filter import QualityFilter, filter_posts_by_quality
 from watermark import add_watermark, should_add_watermark
-from rule34gen import fetch_rule34gen
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -260,12 +259,18 @@ def _request_with_backoff(url, params, headers, max_retries=3):
 
 def fetch_civitai():
     variations = [
-        {"limit": 100, "nsfw": "X", "sort": "Most Reactions", "period": "Day"},
-        {"limit": 100, "nsfw": "X", "sort": "Most Reactions", "period": "Week"},
-        {"limit": 100, "nsfw": "X", "sort": "Most Reactions", "period": "Month"},
-        {"limit": 100, "nsfw": "X", "sort": "Newest",         "period": "Day"},
-        {"limit": 100, "nsfw": "X", "sort": "Newest",         "period": "Week"},
-        {"limit": 100, "nsfw": "X", "sort": "Newest",         "period": "Month"},
+        {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Day"},
+        {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Week"},
+        {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Month"},
+        {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Day"},
+        {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Week"},
+        {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Month"},
+        {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Day"},
+        {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Week"},
+        {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Month"},
+        {"limit": 100, "nsfw": "XXX", "sort": "Newest",         "period": "Day"},
+        {"limit": 100, "nsfw": "XXX", "sort": "Newest",         "period": "Week"},
+        {"limit": 100, "nsfw": "XXX", "sort": "Newest",         "period": "Month"},
     ]
 
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
@@ -356,11 +361,11 @@ def _pick_by_content_type(fresh):
     logger.info(f"Content type selection: {content_type}")
 
     if content_type == 'video':
-        typed = [i for i in fresh if _is_video(i.get("url", ""))]
-        fallback = [i for i in fresh if not _is_video(i.get("url", ""))]
+        typed = [i for i in fresh if _is_video(i["url"])]
+        fallback = [i for i in fresh if not _is_video(i["url"])]
     else:
-        typed = [i for i in fresh if not _is_video(i.get("url", ""))]
-        fallback = [i for i in fresh if _is_video(i.get("url", ""))]
+        typed = [i for i in fresh if not _is_video(i["url"])]
+        fallback = [i for i in fresh if _is_video(i["url"])]
 
     logger.info(f"Items of selected type ({content_type}): {len(typed)}")
 
@@ -373,38 +378,40 @@ def _pick_by_content_type(fresh):
 
 
 def fetch_and_pick_with_quality():
-    """Выбор поста с фильтром качества (только для картинок)"""
-    sources = ["civitai", "rule34", "rule34gen"]
-    source = random.choice(sources)
+    """Выбор поста с фильтром качества + категория AI (имитация отдельного источника)"""
+    
+    # Теперь у нас 3 равноправных источника в ротации
+    source = random.choice(["civitai", "rule34", "rule34_ai"])
     logger.info(f"Source selected: {source}")
 
-    items = []
-
-    if source == "civitai":
+    if source == "rule34_ai":
+        # Используем AI-теги из rule34_api
+        from rule34_api import AI_TAG_SETS
+        tags = random.choice(AI_TAG_SETS)
+        logger.info(f"🤖 AI Category mode: using tags '{tags}'")
+        
+        # Запрашиваем посты через существующий fetch_rule34
+        items = fetch_rule34(tags=tags, limit=100)
+        
+        # Перезаписываем source для каждого айтема, чтобы бот понимал, что это AI
+        if items:
+            for i in items:
+                i["source"] = "rule34_ai"
+                
+    elif source == "civitai":
         items = fetch_civitai()
         if not items:
             logger.warning("CivitAI returned nothing, falling back to Rule34")
             items = fetch_rule34(limit=100)
-
-    elif source == "rule34":
+    else:
+        # Обычный Rule34 (со случайными тегами из TAG_SETS)
         items = fetch_rule34(limit=100)
-        if not items:
-            logger.warning("Rule34 returned nothing, falling back to CivitAI")
-            items = fetch_civitai()
-
-    elif source == "rule34gen":
-        items = fetch_rule34gen(
-            limit=70,
-            sort=random.choice(["newest", "popular", "most-viewed"])
-        )
-        if not items:
-            logger.warning("Rule34Gen returned nothing, falling back to Rule34")
-            items = fetch_rule34(limit=100)
 
     if not items:
         logger.warning("No items found from any source")
         return None
 
+    # Проверка на уникальность (чтобы не постить повторы)
     fresh = [i for i in items if i["id"] not in posted_ids]
     logger.info(f"Fresh items: {len(fresh)} out of {len(items)} (source: {source})")
 
@@ -412,71 +419,38 @@ def fetch_and_pick_with_quality():
         logger.info("No fresh items")
         return None
 
-    # Разделяем посты на видео и картинки
-    video_posts = [i for i in fresh if _is_video(i.get("url", ""))]
-    image_posts = [i for i in fresh if not _is_video(i.get("url", ""))]
+    # --- Далее идет твоя стандартная логика разделения на видео/фото и QualityFilter ---
+    video_posts = [i for i in fresh if _is_video(i["url"])]
+    image_posts = [i for i in fresh if not _is_video(i["url"])]
     
-    logger.info(f"Found {len(video_posts)} videos and {len(image_posts)} images")
-    
-    # 50/50 предпочтение
     prefer_video = random.choice([True, False])
-    logger.info(f"Content type preference: {'video' if prefer_video else 'image'}")
     
-    if not prefer_video and image_posts:
-        logger.info("Prefer image → skipping video section")
-        video_posts = []
-    
-    # Пытаемся взять видео
-    if video_posts:
+    if prefer_video and video_posts:
         selected_video = random.choice(video_posts)
-        logger.info(f"Selected video: {selected_video['id']}")
-        
         try:
             r = requests.get(selected_video["url"], timeout=30)
             r.raise_for_status()
             data = r.content
-            
             duration = get_video_duration(data)
             if 0.5 <= duration <= 60:
                 return selected_video, data
-            
-            # Пробуем другие видео
-            for video in video_posts:
-                if video["id"] == selected_video["id"]:
-                    continue
-                try:
-                    r = requests.get(video["url"], timeout=30)
-                    r.raise_for_status()
-                    data = r.content
-                    if 0.5 <= get_video_duration(data) <= 60:
-                        logger.info(f"Selected alternative video: {video['id']}")
-                        return video, data
-                except:
-                    continue
-        except Exception as e:
-            logger.warning(f"Video download failed {selected_video['id']}: {e}")
+        except:
+            pass
 
-    # Если видео не получилось — идём к картинкам через QualityFilter
     if image_posts:
-        logger.info("Analyzing images with QualityFilter...")
-        valid_posts = []
-        image_data_list = []
+        quality_filter = QualityFilter(min_score=6.0)
+        valid_posts, image_data_list = [], []
         
         for item in image_posts[:20]:
             try:
                 r = requests.get(item["url"], timeout=30)
                 r.raise_for_status()
                 data = r.content
-                
-                if len(data) > 50 * 1024 * 1024:
-                    continue
-                if hashlib.sha256(data).hexdigest() in posted_hashes:
-                    continue
-                
-                valid_posts.append(item)
-                image_data_list.append(data)
-            except Exception as e:
-                logger.warning(f"Download failed {item['id']}: {e}")
+                img_hash = hashlib.sha256(data).hexdigest()
+                if img_hash not in posted_hashes:
+                    valid_posts.append(item)
+                    image_data_list.append(data)
+            except:
                 continue
         
         if valid_posts:
@@ -484,15 +458,12 @@ def fetch_and_pick_with_quality():
                 valid_posts, image_data_list, min_score=6.0
             )
             if selected_post:
-                logger.info(f"Quality filter passed: {selected_post['id']}")
                 return selected_post, selected_image_data
-
-    logger.warning("No suitable posts found, using fallback")
-    return fetch_and_pick(), None
+    
+    return None
 
 def fetch_and_pick():
-    sources = ["civitai", "rule34", "rule34gen"]
-    source = random.choice(sources)
+    source = random.choice(["civitai", "rule34"])
     logger.info(f"Source selected: {source}")
 
     if source == "civitai":
@@ -501,22 +472,12 @@ def fetch_and_pick():
             logger.warning("CivitAI returned nothing, falling back to Rule34")
             source = "rule34"
             items = fetch_rule34(limit=100)
-
-    elif source == "rule34":
+    else:
         items = fetch_rule34(limit=100)
         if not items:
             logger.warning("Rule34 returned nothing, falling back to CivitAI")
             source = "civitai"
             items = fetch_civitai()
-
-    elif source == "rule34gen":
-        items = fetch_rule34gen(
-            limit=70,
-            sort=random.choice(["newest", "popular", "most-viewed"])
-        )
-        if not items:
-            logger.warning("Rule34Gen returned nothing, falling back to Rule34")
-            items = fetch_rule34(limit=100)
 
     if not items:
         logger.warning("No items found from any source")

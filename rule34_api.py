@@ -10,13 +10,25 @@ R34_API_KEY = os.getenv("R34_API_KEY") or os.getenv("RULE34_API_KEY")
 
 logger = logging.getLogger("ErosLab.Rule34")
 
-# Разнообразные наборы тегов — выбираем случайный каждый раз
+# Стандартные наборы тегов для обычных постов
 TAG_SETS = [
     "animated",
     "3d_(artwork)",
     "animated 3d_(artwork)",
     "animated tagme",
     "3d_(artwork) tagme",
+]
+
+# НОВЫЙ БЛОК: Наборы тегов для категории AI (имитация rule34gen)
+AI_TAG_SETS = [
+    "ai_generated", 
+    "ai_generated video", 
+    "ai_generated high_res",
+    "stable_diffusion animated",
+    "ai_generated 3d_(artwork)",
+    "novelai",
+    "midjourney",
+    "ai_generated realistic"
 ]
 
 def fetch_rule34(tags: str = None, limit: int = 100) -> List[Dict[str, Any]]:
@@ -26,10 +38,11 @@ def fetch_rule34(tags: str = None, limit: int = 100) -> List[Dict[str, Any]]:
         logger.error("API credentials are missing in environment variables!")
         return []
 
+    # Если теги не переданы, выбираем случайный стандартный сет
     if tags is None:
         tags = random.choice(TAG_SETS)
 
-    logger.info(f"Rule34: using tags = '{tags}'")
+    logger.info(f"Rule34 Request: tags = '{tags}', limit = {limit}")
 
     url = "https://api.rule34.xxx/index.php"
     params = {
@@ -59,19 +72,12 @@ def fetch_rule34(tags: str = None, limit: int = 100) -> List[Dict[str, Any]]:
             logger.error(f"Rule34 unexpected response format: {type(posts)}")
             return []
 
-        logger.info(f"Rule34 raw posts count: {len(posts)}")
-
-        # Логируем первые посты чтобы видеть структуру
-        if posts:
-            logger.info(f"Rule34 sample keys: {list(posts[0].keys())}")
-            logger.info(f"Rule34 sample ratings: {[p.get('rating') for p in posts[:5]]}")
-
         results = []
         for post in posts:
             if not isinstance(post, dict):
                 continue
 
-            # Принимаем все рейтинги
+            # Принимаем все рейтинги, мапим их для бота
             rating = post.get("rating", "")
             mapped_rating = "XXX" if rating == "e" else "X"
 
@@ -81,6 +87,7 @@ def fetch_rule34(tags: str = None, limit: int = 100) -> List[Dict[str, Any]]:
 
             post_tags = post.get("tags", "").split()
 
+            # Собираем финальный объект поста
             results.append({
                 "id":      f"r34_{post['id']}",
                 "url":     file_url,
@@ -88,10 +95,10 @@ def fetch_rule34(tags: str = None, limit: int = 100) -> List[Dict[str, Any]]:
                 "likes":   int(post.get("score", 0)),
                 "rating":  mapped_rating,
                 "post_id": post.get("id"),
-                "source":  "rule34"
+                "source":  "rule34" # По умолчанию, изменится в боте если выбран AI режим
             })
 
-        logger.info(f"Rule34: Found {len(results)} posts after filtering")
+        logger.info(f"Rule34: Found {len(results)} posts")
         return results
 
     except Exception as e:
