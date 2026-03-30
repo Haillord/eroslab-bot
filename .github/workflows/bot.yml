@@ -35,18 +35,18 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          
-      - name: Install ffmpeg if needed
+
+      # ←←← НОВЫЙ ШАГ: Лучшая установка yt-dlp для GitHub Actions
+      - name: Setup yt-dlp
+        uses: AnimMouse/setup-yt-dlp@v3
+        with:
+          ffmpeg: true        # автоматически установит ffmpeg + yt-dlp
+
+      - name: Install ffmpeg (fallback)
+        if: steps.setup-yt-dlp.outputs.ffmpeg != 'true'
         run: |
-          if ! command -v ffmpeg &> /dev/null; then
-            echo "📦 Installing ffmpeg..."
-            sudo apt-get update --quiet
-            sudo apt-get install -y ffmpeg --no-install-recommends
-            ffmpeg -version | head -n1 > apt-ffmpeg-version.txt
-          else
-            echo "✅ ffmpeg already installed"
-            ffmpeg -version | head -n1
-          fi
+          sudo apt-get update --quiet
+          sudo apt-get install -y ffmpeg --no-install-recommends
 
       - name: Run ErosLab Bot (CivitAI)
         env:
