@@ -191,9 +191,16 @@ def _describe_image(image_data: bytes = None, image_url: str = None) -> str:
         )
 
         if response.status_code == 200:
-            description = response.json()["choices"][0]["message"]["content"].strip()
-            logger.info(f"Vision description: {description[:100]}")
-            return description
+            # Получаем контент безопасно, чтобы не вылететь с ошибкой, если там None
+            content = response.json()["choices"][0]["message"].get("content")
+            
+            if content:
+                description = content.strip()
+                logger.info(f"Vision description: {description[:100]}")
+                return description
+            else:
+                logger.warning("Vision API returned 200, but content is empty (possible safety filter)")
+                return None
         else:
             logger.warning(f"Vision API error {response.status_code}: {response.text[:150]}")
             return None

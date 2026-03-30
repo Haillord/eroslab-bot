@@ -30,7 +30,7 @@ TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "@eroslabai")
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 
 WATERMARK_TEXT   = "@eroslabai"
-MIN_LIKES        = 20
+MIN_LIKES        = 5
 MIN_IMAGE_SIZE   = 512
 
 HISTORY_FILE = "posted_ids.json"
@@ -259,18 +259,12 @@ def _request_with_backoff(url, params, headers, max_retries=3):
 
 def fetch_civitai():
     variations = [
-        {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Day"},
-        {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Week"},
-        {"limit": 100, "nsfw": "X",   "sort": "Most Reactions", "period": "Month"},
-        {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Day"},
-        {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Week"},
-        {"limit": 100, "nsfw": "X",   "sort": "Newest",         "period": "Month"},
-        {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Day"},
-        {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Week"},
-        {"limit": 100, "nsfw": "XXX", "sort": "Most Reactions", "period": "Month"},
-        {"limit": 100, "nsfw": "XXX", "sort": "Newest",         "period": "Day"},
-        {"limit": 100, "nsfw": "XXX", "sort": "Newest",         "period": "Week"},
-        {"limit": 100, "nsfw": "XXX", "sort": "Newest",         "period": "Month"},
+{"limit": 100, "nsfwLevel": 31, "browsingLevel": 31, "sort": "Most Reactions", "period": "Day"},
+        {"limit": 100, "nsfwLevel": 31, "browsingLevel": 31, "sort": "Most Reactions", "period": "Week"},
+        {"limit": 100, "nsfwLevel": 31, "browsingLevel": 31, "sort": "Most Reactions", "period": "Month"},
+        {"limit": 100, "nsfwLevel": 31, "browsingLevel": 31, "sort": "Newest",         "period": "Day"},
+        {"limit": 100, "nsfwLevel": 31, "browsingLevel": 31, "sort": "Newest",         "period": "Week"},
+        {"limit": 100, "nsfwLevel": 31, "browsingLevel": 31, "sort": "Newest",}
     ]
 
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
