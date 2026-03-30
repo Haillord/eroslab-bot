@@ -19,18 +19,21 @@ TAG_SETS = [
     "3d_(artwork) tagme",
 ]
 
-# Теги для ИИ-контента (AI generated) - без "video" тегов (media_type логика сама добавит)
+# Теги для ИИ-контента (AI generated)
 AI_TAG_SETS = [
-    # Базовые теги
+    # Базовые теги (для изображений)
     "stable_diffusion",
     "ai_generated",
     "generated_by_ai",
     "novelai",
+    "ai_art",
     
-    # Анимированные теги
+    # Анимированные теги (для видео)
     "stable_diffusion animated",
     "ai_generated animated",
     "generated_by_ai animated",
+    "ai_art animated",
+    "ai_animation",
 ]
 
 # Теги для 3D контента (с исключением 2D)
@@ -54,15 +57,16 @@ def fetch_rule34(tags: str = None, limit: int = 100, content_type: str = "mixed"
     # Выбор тегов на основе типа контента
     if tags is None:
         if content_type == "ai":
-            tags = random.choice(AI_TAG_SETS)
+            # Для видео выбираем только теги с "animated", для изображений - без
+            if media_type == "video":
+                animated_tags = [t for t in AI_TAG_SETS if "animated" in t.lower()]
+                tags = random.choice(animated_tags) if animated_tags else random.choice(AI_TAG_SETS)
+            else:
+                tags = random.choice(AI_TAG_SETS)
         elif content_type == "3d":
             tags = random.choice(THREE_D_TAG_SETS)
         else:
             tags = random.choice(TAG_SETS)
-    
-    # Добавляем тег для видео если нужно (тега "photo" не существует на Rule34)
-    if media_type == "video" and "video" not in tags and "animated" not in tags:
-        tags = tags + " video"
     
     # Добавляем rating:explicit если нет
     if "rating:explicit" not in tags:

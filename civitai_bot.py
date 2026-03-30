@@ -683,7 +683,30 @@ async def main():
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     
     # Определяем тип контента (3D или AI) на основе тегов
-    content_type = "3d" if any(t.lower() in ["3d", "3d_(artwork)", "3d_video"] for t in item["tags"]) else "ai"
+    AI_TAGS = {
+        "ai", "ai_art", "ai_video", "ai_generated", "ai_animation",
+        "stable_diffusion", "novelai", "midjourney", "generated",
+        "synthetic", "machine_learning", "neural_network"
+    }
+    THREE_D_TAGS = {
+        "3d", "3d_(artwork)", "3d_video", "3d_animation", "3d_model",
+        "blender", "source_filmmaker", "sfm", "daz3d", "koikatsu",
+        "honey_select", "mmd", "3d_render"
+    }
+
+    has_ai = any(t.lower() in AI_TAGS for t in item["tags"])
+    has_3d = any(t.lower() in THREE_D_TAGS for t in item["tags"])
+
+    if has_3d and not has_ai:
+        content_type = "3d"
+    elif has_ai and not has_3d:
+        content_type = "ai"
+    elif has_ai and has_3d:
+        # Если есть оба типа тегов - AI приоритетнее
+        content_type = "ai"
+    else:
+        # Если нет явных тегов - определяем по source
+        content_type = "ai" if item.get("source") == "civitai" else "3d"
     
     caption = generate_caption(
         tags=item["tags"],
