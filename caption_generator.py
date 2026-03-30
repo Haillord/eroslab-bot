@@ -119,6 +119,36 @@ class VisionDetails:
         self.props = []           # props и реквизит
         self.mood = []            # общая атмосфера и настроение
 
+def _fix_truncated_json(content: str) -> str:
+    """Умно "дособирает" обрезанный JSON ответ"""
+    content_stripped = content.strip()
+    
+    # Если не заканчивается на символы, указывающие на обрезание - возвращаем как есть
+    if not content_stripped.endswith((',', '.', '...')):
+        return content_stripped
+    
+    # Эффективные варианты "дособирания" JSON
+    fixes = [
+        # Закрытие массивов
+        '"]}]', '"]}', '"]',
+        # Закрытие строк
+        '"}', '"',
+        # Закрытие объектов
+        '}', 
+    ]
+    
+    for fix in fixes:
+        try:
+            fixed_content = content_stripped + fix
+            # Проверяем что получилось валидным JSON
+            import json as json_module
+            json_module.loads(fixed_content)
+            return fixed_content
+        except json_module.JSONDecodeError:
+            continue
+    
+    return content_stripped
+
 def _describe_image_structured(image_data: bytes = None, image_url: str = None) -> VisionDetails:
     """Получает структурированные данные от Vision-модели"""
     
@@ -265,41 +295,28 @@ def _describe_image_structured(image_data: bytes = None, image_url: str = None) 
             
             # === Попробуем "дособрать" обрезанный JSON ===
             try:
-                # Проверяем, заканчивается ли content на незавершенный JSON
-                content_stripped = content.strip()
+                # Используем умную функцию для "дособирания" JSON
+                fixed_content = _fix_truncated_json(content)
                 
-                # Если заканчивается на запятую, точку или многоточие - возможно обрезано
-                if content_stripped.endswith((',', '.', '...')):
-                    # Попробуем добавить закрывающие скобки
-                    possible_fixes = [
-                        content_stripped + '}',
-                        content_stripped + '"]}',
-                        content_stripped + '"}',
-                        content_stripped + '"]}]'
-                    ]
+                # Если получилось "дособрать" - пробуем распарсить
+                if fixed_content != content.strip():
+                    vision_data = json_module.loads(fixed_content)
+                    logger.info("Vision: JSON successfully fixed and parsed")
                     
-                    for fixed_content in possible_fixes:
-                        try:
-                            vision_data = json_module.loads(fixed_content)
-                            logger.info("Vision: JSON successfully fixed and parsed")
-                            
-                            details = VisionDetails()
-                            details.appearance = vision_data.get("appearance", [])
-                            details.pose = vision_data.get("pose", [])
-                            details.emotions = vision_data.get("emotions", [])
-                            details.background = vision_data.get("background", [])
-                            details.lighting = vision_data.get("lighting", [])
-                            details.props = vision_data.get("props", [])
-                            details.mood = vision_data.get("mood", [])
-                            
-                            if any([details.appearance, details.pose, details.emotions, 
-                                   details.background, details.lighting, details.props, details.mood]):
-                                logger.info(f"Vision fixed data: {len(details.appearance)} appearance, "
-                                           f"{len(details.pose)} pose, {len(details.emotions)} emotions")
-                                return details
-                                
-                        except json_module.JSONDecodeError:
-                            continue
+                    details = VisionDetails()
+                    details.appearance = vision_data.get("appearance", [])
+                    details.pose = vision_data.get("pose", [])
+                    details.emotions = vision_data.get("emotions", [])
+                    details.background = vision_data.get("background", [])
+                    details.lighting = vision_data.get("lighting", [])
+                    details.props = vision_data.get("props", [])
+                    details.mood = vision_data.get("mood", [])
+                    
+                    if any([details.appearance, details.pose, details.emotions, 
+                           details.background, details.lighting, details.props, details.mood]):
+                        logger.info(f"Vision fixed data: {len(details.appearance)} appearance, "
+                                   f"{len(details.pose)} pose, {len(details.emotions)} emotions")
+                        return details
                 
                 # Если не получилось "дособрать" - возвращаем None для fallback
                 logger.warning("Vision: JSON could not be fixed, using fallback")
@@ -641,30 +658,19 @@ def _try_groq(prompt):
                 
                 # === Попробуем "дособрать" обрезанный JSON от Groq ===
                 try:
-                    content_stripped = response.text.strip()
+                    # Используем умную функцию для "дособирания" JSON
+                    fixed_content = _fix_truncated_json(response.text)
                     
-                    # Если заканчивается на запятую, точку или многоточие - возможно обрезано
-                    if content_stripped.endswith((',', '.', '...')):
-                        # Попробуем добавить закрывающие скобки
-                        possible_fixes = [
-                            content_stripped + '}',
-                            content_stripped + '"]}',
-                            content_stripped + '"}',
-                            content_stripped + '"]}]'
-                        ]
-                        
-                        for fixed_content in possible_fixes:
-                            try:
-                                fixed_data = json.loads(fixed_content)
-                                text = fixed_data["choices"][0]["message"]["content"]
-                                if text and isinstance(text, str):
-                                    text = text.strip()
-                                    if _is_valid_response(text):
-                                        text = trim_to_sentence(text, max_len=250)
-                                        logger.info("Groq caption generated successfully (fixed JSON)")
-                                        return text
-                            except (json.JSONDecodeError, KeyError, IndexError, TypeError):
-                                continue
+                    # Если получилось "дособрать" - пробуем распарсить
+                    if fixed_content != response.text.strip():
+                        fixed_data = json.loads(fixed_content)
+                        text = fixed_data["choices"][0]["message"]["content"]
+                        if text and isinstance(text, str):
+                            text = text.strip()
+                            if _is_valid_response(text):
+                                text = trim_to_sentence(text, max_len=250)
+                                logger.info("Groq caption generated successfully (fixed JSON)")
+                                return text
                 
                 except Exception as fix_error:
                     logger.error(f"Groq: Error while trying to fix JSON: {fix_error}")
