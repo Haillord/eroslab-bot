@@ -385,7 +385,7 @@ def fetch_and_pick_with_quality():
     Возвращает (item, data) или None.
     Данные скачиваются ОДИН РАЗ здесь, чтобы main() не делал повторный запрос.
     """
-    source = random.choice(["civitai", "rule34", "rule34_ai"])
+    source = random.choice(["civitai", "civitai", "rule34", "rule34_ai"])
     logger.info(f"Source selected: {source}")
 
     if source == "rule34_ai":
