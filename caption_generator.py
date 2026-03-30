@@ -123,9 +123,22 @@ def _fix_truncated_json(content: str) -> str:
     """Умно "дособирает" обрезанный JSON ответ"""
     content_stripped = content.strip()
     
-    # Если не заканчивается на символы, указывающие на обрезание - возвращаем как есть
-    if not content_stripped.endswith((',', '.', '...')):
+    # Убираем markdown-обёртку если есть
+    if content_stripped.startswith("```json"):
+        content_stripped = content_stripped[7:]
+    elif content_stripped.startswith("```"):
+        content_stripped = content_stripped[3:]
+    if content_stripped.endswith("```"):
+        content_stripped = content_stripped[:-3]
+    content_stripped = content_stripped.strip()
+    
+    # Проверяем — может уже валидный JSON
+    import json as json_module
+    try:
+        json_module.loads(content_stripped)
         return content_stripped
+    except json_module.JSONDecodeError:
+        pass  # продолжаем чинить
     
     # Анализируем структуру обрезанного JSON для подбора подходящих вариантов
     fixes = []
@@ -247,7 +260,7 @@ def _describe_image_structured(image_data: bytes = None, image_url: str = None) 
                         ]
                     }
                 ],
-                "max_tokens": 300
+                "max_tokens": 700
             },
             timeout=25
         )
