@@ -20,20 +20,18 @@ TAG_SETS = [
 ]
 
 # Теги для ИИ-контента (AI generated)
+# Примечание: generated_by_ai и ai_animation не работают на Rule34 - нет таких постов
 AI_TAG_SETS = [
     # Базовые теги (для изображений)
     "stable_diffusion",
     "ai_generated",
-    "generated_by_ai",
     "novelai",
-    "ai_art",
     
-    # Анимированные теги (для видео)
+    # Анимированные теги (для видео) - используем рабочие теги
     "stable_diffusion animated",
     "ai_generated animated",
-    "generated_by_ai animated",
-    "ai_art animated",
-    "ai_animation",
+    "novelai animated",
+    "ai animated",
 ]
 
 # Теги для 3D контента (с исключением 2D)
@@ -153,5 +151,5 @@ def fetch_rule34(tags: str = None, limit: int = 100, content_type: str = "mixed"
             logger.error(f"Rule34 page {page} error: {e}")
             continue
 
-    logger.info(f"Rule34: Found {len(all_results)} total posts from {max_pages} pages")
+    logger.info(f"Rule34: Found {len(all_results)} total posts")
     return all_results

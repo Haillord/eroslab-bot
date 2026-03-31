@@ -58,7 +58,10 @@ HASHTAG_STOP_WORDS = {
     "sampler", "model", "lora", "vae", "clip", "unet", "fp16", "safetensors",
     "checkpoint", "embedding", "none", "null", "true", "false", "and", "the",
     "for", "with", "masterpiece", "best", "quality", "high", "ultra", "detail",
-    "detailed", "8k", "4k", "hd", "resolution", "simple", "background"
+    "detailed", "8k", "4k", "hd", "resolution", "simple", "background",
+    # Rule34 служебные теги
+    "generated_by_ai", "animated", "rating_explicit", "rating_questionable",
+    "rating_safe", "rating_suggestive", "tagme",
 }
 
 logging.basicConfig(
