@@ -1,10 +1,12 @@
 """
-Генератор описаний: только хэштеги + footer.
+Генератор описаний: хэштеги + техническая информация + footer.
 Без AI-подписей, без кринжа.
 """
 
 import logging
+import math
 import os
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,8 @@ TECHNICAL_TAGS = {
     "stable_diffusion", "novelai", "midjourney", "lora"
 }
 
+SEPARATOR = "━" * 20  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 def _safe_tags(tags):
     """Только для хэштегов — убираем NSFW и технические теги."""
@@ -46,31 +50,121 @@ def _safe_tags(tags):
     return result
 
 
+def _format_file_size(size_bytes):
+    """Форматирует размер файла в читаемый вид."""
+    if size_bytes is None or size_bytes <= 0:
+        return None
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    if size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+def _format_resolution(width, height):
+    """Форматирует разрешение и соотношение сторон."""
+    if width is None or height is None or width <= 0 or height <= 0:
+        return None, None
+
+    resolution = f"{width}×{height}"
+
+    # Вычисляем соотношение сторон
+    gcd = math.gcd(width, height)
+    ratio_w = width // gcd
+    ratio_h = height // gcd
+    aspect_ratio = f"{ratio_w}:{ratio_h}"
+
+    return resolution, aspect_ratio
+
+
+def _format_date(date_value):
+    """Форматирует дату в читаемый вид."""
+    if date_value is None:
+        return None
+
+    if isinstance(date_value, datetime):
+        return date_value.strftime("%d.%m.%Y")
+
+    if isinstance(date_value, str):
+        # Пробуем распарсить разные форматы
+        for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d", "%m/%d/%Y"]:
+            try:
+                dt = datetime.strptime(date_value, fmt)
+                return dt.strftime("%d.%m.%Y")
+            except ValueError:
+                continue
+
+    return None
+
+
 # ==================== СБОРКА ====================
-
-def _format_caption(tags, footer, content_header=None):
-    safe_tags = _safe_tags(tags)
-    hashtags = " ".join(f"#{t}" for t in safe_tags[:6]) if safe_tags else ""
-
-    header_line = f"{content_header}\n" if content_header else ""
-    if hashtags:
-        return f"{header_line}\n{hashtags}\n\n{footer}"
-    return f"{header_line}\n{footer}"
-
 
 def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      watermark="📢 @eroslabai", suggestion="💬 Предложка: @Haillord",
-                     content_type="ai"):
+                     content_type="ai", width=None, height=None,
+                     file_size=None, date=None):
+    """
+    Генерирует подпись с технической информацией.
+
+    Параметры:
+    - width, height: размеры изображения в пикселях
+    - file_size: размер файла в байтах
+    - date: дата создания (datetime или строка в формате YYYY-MM-DD)
+    """
     # Экранируем специальные HTML-символы в watermark
     safe_watermark = watermark.replace("&", "&").replace("<", "<").replace(">", ">")
     # Используем HTML-ссылку для "Предложка"
     clickable_suggestion = '💬 <a href="https://t.me/Haillord">Предложка</a>'
     footer = f"{safe_watermark}\n{clickable_suggestion}"
 
-    # Форматируем тип контента с цветными кружками
+    # Форматируем тип контента
     if content_type == "ai":
         content_header = "🟢 AI Art | 🔴 3D"
     else:
         content_header = "🔴 AI Art | 🟢 3D"
 
-    return _format_caption(tags, footer, content_header)
+    # Форматируем техническую информацию
+    resolution, aspect_ratio = _format_resolution(width, height)
+    formatted_size = _format_file_size(file_size)
+    formatted_date = _format_date(date)
+
+    # Собираем технический блок
+    tech_lines = []
+    if resolution and aspect_ratio:
+        tech_lines.append(f"📐 {resolution} | {aspect_ratio}")
+    elif resolution:
+        tech_lines.append(f"📐 {resolution}")
+
+    if formatted_size:
+        tech_lines.append(f"💾 {formatted_size}")
+
+    if formatted_date:
+        tech_lines.append(f"📅 {formatted_date}")
+
+    tech_block = "\n".join(tech_lines) if tech_lines else ""
+
+    # Форматируем хэштеги
+    safe_tags = _safe_tags(tags)
+    hashtags = " ".join(f"#{t}" for t in safe_tags[:6]) if safe_tags else ""
+
+    # Собираем итоговую подпись
+    parts = []
+    parts.append(SEPARATOR)
+    parts.append(content_header)
+    parts.append(SEPARATOR)
+
+    if tech_block:
+        parts.append(tech_block)
+
+    if hashtags:
+        parts.append("")  # пустая строка для разделения
+        parts.append(SEPARATOR)
+        parts.append(hashtags)
+        parts.append(SEPARATOR)
+
+    parts.append("")  # пустая строка перед footer
+    parts.append(footer)
+
+    return "\n".join(parts)
