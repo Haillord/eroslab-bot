@@ -30,7 +30,6 @@ TECHNICAL_TAGS = {
     "stable_diffusion", "novelai", "midjourney", "lora"
 }
 
-SEPARATOR = "━" * 20  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 def _safe_tags(tags):
@@ -149,22 +148,15 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
     safe_tags = _safe_tags(tags)
     hashtags = " ".join(f"#{t}" for t in safe_tags[:6]) if safe_tags else ""
 
-    # Собираем итоговую подпись
-    parts = []
-    parts.append(SEPARATOR)
-    parts.append(content_header)
-    parts.append(SEPARATOR)
+    # Собираем итоговую подпись (адаптивно - без лишних пустых строк)
+    parts = [content_header]
 
     if tech_block:
         parts.append(tech_block)
 
     if hashtags:
-        parts.append("")  # пустая строка для разделения
-        parts.append(SEPARATOR)
         parts.append(hashtags)
-        parts.append(SEPARATOR)
 
-    parts.append("")  # пустая строка перед footer
     parts.append(footer)
 
-    return "\n".join(parts)
+    return "\n\n".join(parts)
