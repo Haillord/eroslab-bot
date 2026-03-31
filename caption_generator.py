@@ -143,7 +143,7 @@ def _describe_image(image_data: bytes = None, image_url: str = None) -> str:
                                 "text": (
                                     "Describe this image in Russian. "
                                     "Focus on mood, tension and key elements. "
-                                    "Write 1-2 short evocative sentences. "
+                                    "Write 1 short evocative sentences. "
                                     "Avoid explicit words."
                                 )
                             }
