@@ -69,7 +69,7 @@ jobs:
           # Сначала делаем pull, чтобы получить последние изменения
           git pull origin main --no-rebase || true
           
-          git add posted_ids.json posted_hashes.json stats.json apt-ffmpeg-version.txt 2>/dev/null || true
+          git add posted_ids.json posted_hashes.json stats.json apt-ffmpeg-version.txt content_state.json 2>/dev/null || true
           
           if git diff --cached --quiet; then
             echo "📝 No changes to commit"
