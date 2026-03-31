@@ -115,8 +115,7 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
     clickable_suggestion = '💬 <a href="https://t.me/Haillord">Предложка</a>'
     footer = f"{safe_watermark}\n{clickable_suggestion}"
 
-    # Фикс: показываем только актуальный тип контента
-    content_header = "🤖 AI Art" if content_type == "ai" else "🎨 3D Art"
+    content_header = "🟢 AI Art | 🔴 3D" if content_type == "ai" else "🔴 AI Art | 🟢 3D"
 
     # Техническая информация
     resolution, aspect_ratio = _format_resolution(width, height)
