@@ -17,7 +17,7 @@ NSFW_TRIGGER_TAGS = {
     "pussy", "cum", "anal", "blowjob", "nsfw", "explicit", "porn",
     "hentai", "xxx", "nipple", "nipples", "breast", "breasts", "ass",
     "bondage", "bdsm", "fetish", "gangbang", "creampie", "ahegao",
-    "spread_legs", "pussy_juice", "uncensored", "censored", "genitals"
+    "spread_legs", "pussy_juice", "uncensored", "censored", "genitals", "d0gg1e"
 }
 
 TECHNICAL_TAGS = {
