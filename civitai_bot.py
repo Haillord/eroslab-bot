@@ -332,12 +332,19 @@ def _extract_civitai_likes(item):
     Возвращает максимум найденного, чтобы не занизить популярность поста.
     """
     stats = item.get("stats") or {}
+    stats_total = 0
+    if isinstance(stats, dict):
+        for key, value in stats.items():
+            key_lower = str(key).lower()
+            if "count" in key_lower:
+                stats_total += _to_int(value, 0)
 
     candidates = [
         stats.get("likeCount"),
         stats.get("heartCount"),
         stats.get("reactionCount"),
         stats.get("favoriteCount"),
+        stats_total,
         item.get("likeCount"),
         item.get("heartCount"),
         item.get("reactionCount"),
@@ -418,6 +425,13 @@ def fetch_civitai():
             f"Got {len(items)} items total "
             f"(browsingLevel={base_params['browsingLevel']}, sort={base_params['sort']}, period={period})"
         )
+        precomputed_likes = [_extract_civitai_likes(i) for i in items]
+        likes_filter_enabled = any(v > 0 for v in precomputed_likes)
+        if not likes_filter_enabled:
+            logger.warning(
+                "CivitAI reactions unavailable (all zero). "
+                "Likes filter will be disabled for this batch."
+            )
 
         erotic_items = []
         skipped_nsfw = 0
@@ -458,7 +472,7 @@ def fetch_civitai():
                 likes = _extract_civitai_likes(item)
                 likes_observed.append(likes)
 
-                if likes < MIN_CIVITAI_LIKES:
+                if likes_filter_enabled and likes < MIN_CIVITAI_LIKES:
                     skipped_likes += 1
                     continue
 
@@ -486,7 +500,8 @@ def fetch_civitai():
             f"No suitable posts: skipped_nsfw={skipped_nsfw}, "
             f"skipped_blacklist={skipped_blacklist}, skipped_likes={skipped_likes}, "
             f"civitai_min_likes={MIN_CIVITAI_LIKES}, "
-            f"allow_mature_fallback={ALLOW_MATURE_FALLBACK}"
+            f"allow_mature_fallback={ALLOW_MATURE_FALLBACK}, "
+            f"likes_filter_enabled={likes_filter_enabled}"
         )
         logger.info(f"CivitAI nsfw distribution: {nsfw_distribution}")
         if likes_observed:
