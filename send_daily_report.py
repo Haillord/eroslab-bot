@@ -7,7 +7,11 @@ from zoneinfo import ZoneInfo
 from telegram import Bot
 
 STATS_FILE = "stats.json"
-REPORT_CHAT = os.environ.get("TELEGRAM_REPORT_CHAT", "@Haillord")
+REPORT_CHAT = (
+    os.environ.get("ADMIN_USER_ID")
+    or os.environ.get("TELEGRAM_REPORT_CHAT")
+    or "@Haillord"
+)
 STATS_TZ = os.environ.get("STATS_TZ", "Europe/Moscow")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
@@ -109,4 +113,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
