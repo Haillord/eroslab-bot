@@ -30,6 +30,7 @@ CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 
 WATERMARK_TEXT   = "@eroslabai"
 MIN_LIKES        = 10
+MIN_CIVITAI_LIKES = int(os.environ.get("MIN_CIVITAI_LIKES", "5"))
 MIN_IMAGE_SIZE   = 720
 
 # Временно отключить Rule34 (True = только CivitAI для тестов)
@@ -318,13 +319,14 @@ def fetch_civitai():
     ]
 
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
-    min_posts = 50  # Минимум постов для выбора
+    max_pages = 5
 
     for base_params in variations:
         all_items = []
+        seen_ids = set()
         
-        # Ищем по 5 страницам для каждой вариации
-        for page in range(1, 6):
+        # Ищем по нескольким страницам для каждой вариации
+        for page in range(1, max_pages + 1):
             params = {**base_params, "limit": 100, "page": page}
             
             try:
@@ -349,11 +351,16 @@ def fetch_civitai():
                     logger.debug(f"CivitAI page {page}: no items")
                     continue
 
-                all_items.extend(items)
+                for item in items:
+                    item_id = item.get("id")
+                    if item_id in seen_ids:
+                        continue
+                    seen_ids.add(item_id)
+                    all_items.append(item)
                 logger.info(f"CivitAI page {page}: got {len(items)} items (total: {len(all_items)})")
-                
-                # Если набрали достаточно — останавливаемся
-                if len(all_items) >= min_posts:
+
+                # Если страница неполная — обычно это конец выдачи
+                if len(items) < 100:
                     break
 
             except Exception as e:
@@ -404,7 +411,7 @@ def fetch_civitai():
                         + stats_data.get("heartCount", 0)
                     )
 
-                if likes < MIN_LIKES:
+                if likes < MIN_CIVITAI_LIKES:
                     skipped_likes += 1
                     continue
 
@@ -428,7 +435,11 @@ def fetch_civitai():
             logger.info(f"Found {len(erotic_items)} X/XXX rated posts")
             return erotic_items
 
-        logger.info(f"No suitable posts: skipped_nsfw={skipped_nsfw}, skipped_blacklist={skipped_blacklist}, skipped_likes={skipped_likes}")
+        logger.info(
+            f"No suitable posts: skipped_nsfw={skipped_nsfw}, "
+            f"skipped_blacklist={skipped_blacklist}, skipped_likes={skipped_likes}, "
+            f"civitai_min_likes={MIN_CIVITAI_LIKES}"
+        )
 
     return []
 
