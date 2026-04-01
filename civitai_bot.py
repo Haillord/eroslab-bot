@@ -365,9 +365,10 @@ def fetch_civitai():
             continue
 
         items = all_items
+        period = base_params.get("period", "N/A")
         logger.info(
             f"Got {len(items)} items total "
-            f"(browsingLevel={base_params['browsingLevel']}, sort={base_params['sort']}, period={base_params['period']})"
+            f"(browsingLevel={base_params['browsingLevel']}, sort={base_params['sort']}, period={period})"
         )
 
         erotic_items = []
