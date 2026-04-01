@@ -75,10 +75,13 @@ MALE_ONLY_PATTERNS = (
     r"(^|_)male_focus(_|$)",
     r"(^|_)male_pov(_|$)",
     r"(^|_)1boy(_|$)",
+    r"(^|_)\d+boy(s)?(_|$)",
     r"(^|_)2boys(_|$)",
     r"(^|_)3boys(_|$)",
     r"(^|_)multiple_boys(_|$)",
     r"(^|_)male_male(_|$)",
+    r"(^|_)all_male(_|$)",
+    r"(^|_)male_group(_|$)",
     r"(^|_)gay_male(_|$)",
     r"(^|_)boy_love(_|$)",
 )
