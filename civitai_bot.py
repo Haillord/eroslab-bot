@@ -30,7 +30,7 @@ CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 
 WATERMARK_TEXT   = "@eroslabai"
 MIN_LIKES        = 10
-MIN_CIVITAI_LIKES = int(os.environ.get("MIN_CIVITAI_LIKES", "5"))
+MIN_CIVITAI_LIKES = int(os.environ.get("MIN_CIVITAI_LIKES", "1"))
 ALLOW_MATURE_FALLBACK = os.environ.get("ALLOW_MATURE_FALLBACK", "true").lower() in ("1", "true", "yes", "on")
 MIN_IMAGE_SIZE   = 720
 
@@ -318,6 +318,33 @@ def _is_mature_or_higher(nsfw_level):
         return nsfw_level >= 4
     return False
 
+def _to_int(value, default=0):
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except Exception:
+        return default
+
+def _extract_civitai_likes(item):
+    """
+    Пытается достать реакцию из разных версий/вариантов полей CivitAI.
+    Возвращает максимум найденного, чтобы не занизить популярность поста.
+    """
+    stats = item.get("stats") or {}
+
+    candidates = [
+        stats.get("likeCount"),
+        stats.get("heartCount"),
+        stats.get("reactionCount"),
+        stats.get("favoriteCount"),
+        item.get("likeCount"),
+        item.get("heartCount"),
+        item.get("reactionCount"),
+    ]
+    numeric = [_to_int(v, 0) for v in candidates]
+    return max(numeric) if numeric else 0
+
 def fetch_civitai():
     # Используем browsingLevel=31 для максимального охвата + nsfw=X для explicit.
     variations = [
@@ -398,6 +425,7 @@ def fetch_civitai():
         skipped_likes = 0
         accepted_mature = 0
         nsfw_distribution = {}
+        likes_observed = []
         
         # Debug: sample first 5 items nsfwLevel
         for debug_item in items[:5]:
@@ -427,12 +455,8 @@ def fetch_civitai():
                     continue
 
                 stats_data = item.get("stats", {})
-                likes = 0
-                if stats_data:
-                    likes = (
-                        stats_data.get("likeCount", 0)
-                        + stats_data.get("heartCount", 0)
-                    )
+                likes = _extract_civitai_likes(item)
+                likes_observed.append(likes)
 
                 if likes < MIN_CIVITAI_LIKES:
                     skipped_likes += 1
@@ -465,6 +489,12 @@ def fetch_civitai():
             f"allow_mature_fallback={ALLOW_MATURE_FALLBACK}"
         )
         logger.info(f"CivitAI nsfw distribution: {nsfw_distribution}")
+        if likes_observed:
+            likes_sorted = sorted(likes_observed)
+            median_like = likes_sorted[len(likes_sorted) // 2]
+            logger.info(
+                f"CivitAI likes diagnostics: min={likes_sorted[0]}, median={median_like}, max={likes_sorted[-1]}"
+            )
 
     return []
 
