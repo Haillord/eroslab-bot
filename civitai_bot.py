@@ -31,7 +31,7 @@ CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 WATERMARK_TEXT   = "@eroslabai"
 MIN_LIKES        = 10
 MIN_CIVITAI_LIKES = int(os.environ.get("MIN_CIVITAI_LIKES", "1"))
-ALLOW_MATURE_FALLBACK = os.environ.get("ALLOW_MATURE_FALLBACK", "true").lower() in ("1", "true", "yes", "on")
+ALLOW_MATURE_FALLBACK = os.environ.get("ALLOW_MATURE_FALLBACK", "false").lower() in ("1", "true", "yes", "on")
 MIN_IMAGE_SIZE   = 720
 
 # Временно отключить Rule34 (True = только CivitAI для тестов)

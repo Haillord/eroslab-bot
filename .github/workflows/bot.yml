@@ -53,6 +53,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           CIVITAI_API_KEY: ${{ secrets.CIVITAI_API_KEY }}
+          ALLOW_MATURE_FALLBACK: "false"
           R34_API_KEY: ${{ secrets.R34_API_KEY }}
           R34_USER_ID: ${{ secrets.R34_USER_ID }}
           POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
