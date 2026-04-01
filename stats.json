@@ -1,5 +1,5 @@
 {
-  "total_posts": 99,
+  "total_posts": 100,
   "sources": {},
   "top_tags": {
     "nsfw": 1,
@@ -121,5 +121,39 @@
     "yellow": 1,
     "revealing_sharp_upper_teeth": 1,
     "eyes_shut_tight": 1
-  }
+  },
+  "schema_version": 2,
+  "daily": {
+    "2026-04-02": {
+      "runs": 1,
+      "posted": 1,
+      "source_civitai_selected": 0,
+      "source_rule34_selected": 1,
+      "skip_no_item": 0,
+      "skip_download_error": 0,
+      "skip_file_too_large": 0,
+      "skip_small_image": 0,
+      "skip_bad_video_duration": 0,
+      "skip_low_video_quality": 0,
+      "skip_duplicate_hash": 0,
+      "send_errors": 0,
+      "runtime_sec": 4.45
+    }
+  },
+  "lifetime": {
+    "runs": 1,
+    "posted": 1,
+    "source_civitai_selected": 0,
+    "source_rule34_selected": 1,
+    "skip_no_item": 0,
+    "skip_download_error": 0,
+    "skip_file_too_large": 0,
+    "skip_small_image": 0,
+    "skip_bad_video_duration": 0,
+    "skip_low_video_quality": 0,
+    "skip_duplicate_hash": 0,
+    "send_errors": 0,
+    "runtime_sec": 4.45
+  },
+  "report": {}
 }
