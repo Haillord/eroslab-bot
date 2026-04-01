@@ -17,6 +17,8 @@ import requests
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 import telegram
 from telegram import Bot
@@ -33,6 +35,10 @@ MIN_LIKES        = 10
 MIN_CIVITAI_LIKES = int(os.environ.get("MIN_CIVITAI_LIKES", "1"))
 ALLOW_MATURE_FALLBACK = os.environ.get("ALLOW_MATURE_FALLBACK", "false").lower() in ("1", "true", "yes", "on")
 MIN_IMAGE_SIZE   = 720
+ENABLE_VIDEO_QOS = os.environ.get("ENABLE_VIDEO_QOS", "true").lower() in ("1", "true", "yes", "on")
+MIN_BITRATE_480P  = int(os.environ.get("MIN_BITRATE_480P", "900"))
+MIN_BITRATE_720P  = int(os.environ.get("MIN_BITRATE_720P", "1400"))
+MIN_BITRATE_1080P = int(os.environ.get("MIN_BITRATE_1080P", "2200"))
 
 # Временно отключить Rule34 (True = только CivitAI для тестов)
 TEST_CIVITAI_ONLY = False
@@ -40,7 +46,9 @@ TEST_CIVITAI_ONLY = False
 HISTORY_FILE = "posted_ids.json"
 HASHES_FILE  = "posted_hashes.json"
 CONTENT_STATE_FILE = "content_state.json"
+STATS_FILE = "stats.json"
 MAX_HISTORY_SIZE = 5000
+STATS_TZ = os.environ.get("STATS_TZ", "Europe/Moscow")
 
 BLACKLIST_TAGS = {
     # Gore/violence
@@ -110,6 +118,51 @@ def save_json(path, data):
 posted_ids    = set(load_json(HISTORY_FILE, []))
 posted_hashes = set(load_json(HASHES_FILE, []))
 content_state = load_json(CONTENT_STATE_FILE, {"last_type": "3d", "last_media": "video"})
+
+def _get_stats_day_key():
+    try:
+        return datetime.now(ZoneInfo(STATS_TZ)).date().isoformat()
+    except Exception:
+        return datetime.utcnow().date().isoformat()
+
+def _load_stats():
+    data = load_json(STATS_FILE, {})
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("schema_version", 2)
+    data.setdefault("daily", {})
+    data.setdefault("lifetime", {})
+    data.setdefault("report", {})
+    return data
+
+def _increment_metrics(target: dict, metrics: dict):
+    for key, value in metrics.items():
+        if isinstance(value, (int, float)):
+            target[key] = target.get(key, 0) + value
+
+def record_run_stats(metrics: dict):
+    stats = _load_stats()
+    day_key = _get_stats_day_key()
+    daily = stats["daily"].setdefault(day_key, {})
+    lifetime = stats["lifetime"]
+
+    _increment_metrics(daily, metrics)
+    _increment_metrics(lifetime, metrics)
+
+    # Совместимость со старым форматом.
+    if metrics.get("posted", 0) > 0:
+        stats["total_posts"] = stats.get("total_posts", 0) + int(metrics["posted"])
+
+    # Держим только последние 45 дней daily-статистики.
+    try:
+        keys_sorted = sorted(stats["daily"].keys())
+        while len(keys_sorted) > 45:
+            oldest = keys_sorted.pop(0)
+            stats["daily"].pop(oldest, None)
+    except Exception:
+        pass
+
+    save_json(STATS_FILE, stats)
 
 def get_next_content_type():
     """Чередует между 3d и ai контентом"""
@@ -221,6 +274,48 @@ def get_video_duration(data: bytes) -> float:
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
+def get_video_dimensions(data: bytes):
+    """Возвращает (width, height) видео или (None, None) при ошибке."""
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+
+        cmd = [
+            'ffprobe', '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height',
+            '-of', 'csv=s=x:p=0',
+            tmp_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            return None, None
+
+        raw = result.stdout.strip()
+        if not raw or "x" not in raw:
+            return None, None
+
+        width_str, height_str = raw.split("x", 1)
+        return int(width_str), int(height_str)
+    except Exception as e:
+        logger.warning(f"Could not read video dimensions: {e}")
+        return None, None
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+def get_min_bitrate_kbps_for_height(height):
+    """Адаптивный порог минимального битрейта по высоте видео."""
+    if height is None:
+        return MIN_BITRATE_720P
+    if height >= 1080:
+        return MIN_BITRATE_1080P
+    if height >= 720:
+        return MIN_BITRATE_720P
+    return MIN_BITRATE_480P
 
 def get_video_thumbnail(data: bytes) -> bytes:
     """Извлекает первый кадр видео как JPEG bytes для vision."""
@@ -690,12 +785,39 @@ def weighted_choice(items):
 
 # ==================== MAIN ====================
 async def main():
+    run_started = time.time()
+    run_metrics = {
+        "runs": 1,
+        "posted": 0,
+        "source_civitai_selected": 0,
+        "source_rule34_selected": 0,
+        "skip_no_item": 0,
+        "skip_download_error": 0,
+        "skip_file_too_large": 0,
+        "skip_small_image": 0,
+        "skip_bad_video_duration": 0,
+        "skip_low_video_quality": 0,
+        "skip_duplicate_hash": 0,
+        "send_errors": 0,
+    }
+    stats_flushed = False
+
+    def flush_stats_once():
+        nonlocal stats_flushed
+        if stats_flushed:
+            return
+        run_metrics["runtime_sec"] = round(time.time() - run_started, 2)
+        record_run_stats(run_metrics)
+        stats_flushed = True
+
     if not TELEGRAM_BOT_TOKEN:
         logger.error("No TELEGRAM_BOT_TOKEN found!")
+        flush_stats_once()
         return
 
     if not CIVITAI_API_KEY:
         logger.error("No CIVITAI_API_KEY found!")
+        flush_stats_once()
         return
 
     logger.info("=" * 50)
@@ -703,6 +825,13 @@ async def main():
     logger.info(f"Channel: {TELEGRAM_CHANNEL_ID}")
     logger.info(f"Min likes: {MIN_LIKES}")
     logger.info(f"Min image size: {MIN_IMAGE_SIZE}x{MIN_IMAGE_SIZE}")
+    logger.info(
+        "Video QoS: "
+        f"enabled={ENABLE_VIDEO_QOS}, "
+        f"min_bitrate_480p={MIN_BITRATE_480P}, "
+        f"min_bitrate_720p={MIN_BITRATE_720P}, "
+        f"min_bitrate_1080p={MIN_BITRATE_1080P}"
+    )
     logger.info("=" * 50)
 
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -713,7 +842,12 @@ async def main():
 
         if not item:
             logger.info("No more fresh posts available")
+            run_metrics["skip_no_item"] += 1
+            flush_stats_once()
             return
+
+        source_key = f"source_{item.get('source', 'unknown')}_selected"
+        run_metrics[source_key] = run_metrics.get(source_key, 0) + 1
 
         try:
             logger.info(f"Downloading: {item['url']}")
@@ -724,12 +858,14 @@ async def main():
             download_content_type = (r.headers.get("Content-Type") or "").lower()
         except Exception as e:
             logger.error(f"Download Error: {e}")
+            run_metrics["skip_download_error"] += 1
             posted_ids.add(item["id"])
             save_all()
             continue
 
         if len(data) > MAX_FILE_SIZE:
             logger.warning(f"File too large ({len(data)} bytes > 50MB), skipping")
+            run_metrics["skip_file_too_large"] += 1
             posted_ids.add(item["id"])
             save_all()
             continue
@@ -753,6 +889,7 @@ async def main():
         if not is_video:
             if not check_media_size(data, item["url"]):
                 logger.warning("Image size too small, skipping")
+                run_metrics["skip_small_image"] += 1
                 posted_ids.add(item["id"])
                 save_all()
                 continue
@@ -767,14 +904,37 @@ async def main():
             duration = get_video_duration(data)
             if duration < 0.5 or duration > 60:
                 logger.warning(f"Video too short ({duration:.2f}s) or too long, skipping")
+                run_metrics["skip_bad_video_duration"] += 1
                 posted_ids.add(item["id"])
                 save_all()
                 continue
             logger.info(f"Video duration: {duration:.2f}s")
 
+            # Получаем размер кадра для caption и QoS-фильтра
+            img_width, img_height = get_video_dimensions(data)
+
+            avg_bitrate_kbps = (len(data) * 8) / duration / 1000 if duration > 0 else 0
+            min_bitrate_kbps = get_min_bitrate_kbps_for_height(img_height)
+            logger.info(
+                "Video QoS stats: "
+                f"resolution={img_width}x{img_height}, "
+                f"avg_bitrate={avg_bitrate_kbps:.0f} kbps, "
+                f"required_min={min_bitrate_kbps} kbps"
+            )
+
+            if ENABLE_VIDEO_QOS and avg_bitrate_kbps < min_bitrate_kbps:
+                logger.warning(
+                    f"Skipping low-quality video: {avg_bitrate_kbps:.0f} < {min_bitrate_kbps} kbps"
+                )
+                run_metrics["skip_low_video_quality"] += 1
+                posted_ids.add(item["id"])
+                save_all()
+                continue
+
         img_hash = hashlib.sha256(data).hexdigest()
         if img_hash in posted_hashes:
             logger.warning("Duplicate content detected")
+            run_metrics["skip_duplicate_hash"] += 1
             posted_ids.add(item["id"])
             save_all()
             continue
@@ -782,6 +942,7 @@ async def main():
         break
     else:
         logger.error(f"No suitable post found after {MAX_ATTEMPTS} attempts")
+        flush_stats_once()
         return
 
     # ========== THUMBNAIL ДЛЯ ВИДЕО (для vision) ==========
@@ -895,9 +1056,13 @@ async def main():
         posted_hashes.add(img_hash)
         save_all()
         logger.info(f"Successfully posted: {item['id']}")
+        run_metrics["posted"] += 1
+        flush_stats_once()
 
     except Exception as e:
         logger.error(f"Telegram Send Error: {e}")
+        run_metrics["send_errors"] += 1
+        flush_stats_once()
 
 if __name__ == "__main__":
     asyncio.run(main())
