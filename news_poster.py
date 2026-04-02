@@ -66,12 +66,15 @@ NEWS_MIN_IMAGE_HEIGHT = int(os.environ.get("NEWS_MIN_IMAGE_HEIGHT", "390"))
 NEWS_IMAGE_CHECK_TIMEOUT = int(os.environ.get("NEWS_IMAGE_CHECK_TIMEOUT", "8"))
 NEWS_MEDIA_MAX_IMAGES = int(os.environ.get("NEWS_MEDIA_MAX_IMAGES", "3"))
 NEWS_MAX_REDDIT_STREAK = int(os.environ.get("NEWS_MAX_REDDIT_STREAK", "1"))
+NEWS_FEED_TIMEOUT = int(os.environ.get("NEWS_FEED_TIMEOUT", "10"))
+NEWS_FILTER_MODE = os.environ.get("NEWS_FILTER_MODE", "thematic").strip().lower()
 
 
 RELEVANCE_ERO_KEYWORDS = {
     "nsfw", "adult", "18+", "erotic", "hentai", "ecchi", "lewd",
     "uncensor", "uncensored", "censored", "visual novel", "dating sim",
-    "sex game", "porn game", "bdsm", "fetish",
+    "sex game", "porn game", "bdsm", "fetish", "mature", "16+", "17+",
+    "r18", "r-18", "ero", "adult mod", "nsfw mod", "romance",
 }
 
 RELEVANCE_GAME_KEYWORDS = {
@@ -274,6 +277,11 @@ def _keyword_hits(blob: str, keywords: set[str]) -> int:
 
 
 def _is_relevant(item: NewsItem) -> bool:
+    """
+    Strict mode:
+    - erotica context required
+    - release/update/mod signal required
+    """
     blob = f"{item.title} {item.summary}".lower()
     title_blob = item.title.lower()
     if any(x in blob for x in EXCLUDE_KEYWORDS):
@@ -304,8 +312,9 @@ def _is_relevant(item: NewsItem) -> bool:
 
 def _is_relevant_soft(item: NewsItem) -> bool:
     """
-    Soft fallback when strict mode returned nothing.
-    Still erotica-first, but without mandatory release/update signal.
+    Thematic mode:
+    - erotica + game/ai context
+    - no mandatory release/update signal
     """
     blob = f"{item.title} {item.summary}".lower()
     if any(x in blob for x in EXCLUDE_KEYWORDS):
@@ -316,7 +325,14 @@ def _is_relevant_soft(item: NewsItem) -> bool:
     ero_hits = _keyword_hits(blob, RELEVANCE_ERO_KEYWORDS)
     game_hits = _keyword_hits(blob, RELEVANCE_GAME_KEYWORDS)
     ai_hits = _keyword_hits(blob, RELEVANCE_AI_KEYWORDS)
-    return ero_hits >= 1 and (game_hits >= 1 or ai_hits >= 1)
+    release_hits = _keyword_hits(blob, RELEASE_SIGNAL_KEYWORDS)
+    # allow broader "channel-topic" posts:
+    # nsfw/mature + (game|ai) OR explicit release/mod/update signals.
+    if ero_hits >= 1 and (game_hits >= 1 or ai_hits >= 1):
+        return True
+    if ero_hits >= 1 and release_hits >= 1:
+        return True
+    return False
 
 
 def _fetch_news() -> list[NewsItem]:
@@ -327,7 +343,14 @@ def _fetch_news() -> list[NewsItem]:
     for src in get_news_sources():
         try:
             logger.info(f"Fetching feed: {src}")
-            feed = feedparser.parse(src)
+            # Use explicit HTTP fetch with timeout so one broken source can't stall the whole run.
+            resp = requests.get(
+                src,
+                timeout=NEWS_FEED_TIMEOUT,
+                headers={"User-Agent": "ErosLabNewsBot/1.0 (+https://t.me/eroslabai)"},
+            )
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.content)
             entries = getattr(feed, "entries", []) or []
             logger.info(f"Feed entries: {len(entries)} ({src})")
             for entry in entries[:NEWS_FETCH_LIMIT]:
@@ -357,15 +380,23 @@ def _fetch_news() -> list[NewsItem]:
             logger.warning(f"Failed to parse feed {src}: {e}")
 
     strict = [x for x in collected if _is_relevant(x)]
-    if strict:
-        strict.sort(key=lambda x: (_source_priority(x.source_kind), x.published_ts), reverse=True)
-        logger.info(f"Relevant fresh news items: {len(strict)} (mode=strict)")
-        return strict
-
     soft = [x for x in collected if _is_relevant_soft(x)]
-    soft.sort(key=lambda x: (_source_priority(x.source_kind), x.published_ts), reverse=True)
-    logger.info(f"Relevant fresh news items: {len(soft)} (mode=soft-fallback)")
-    return soft
+
+    if NEWS_FILTER_MODE == "strict":
+        selected = strict
+        selected_mode = "strict"
+    elif NEWS_FILTER_MODE == "thematic":
+        # Prefer broader thematic flow, fallback to strict if needed.
+        selected = soft if soft else strict
+        selected_mode = "thematic" if soft else "strict-fallback"
+    else:
+        # auto: keep previous behavior.
+        selected = strict if strict else soft
+        selected_mode = "strict" if strict else "soft-fallback"
+
+    selected.sort(key=lambda x: (_source_priority(x.source_kind), x.published_ts), reverse=True)
+    logger.info(f"Relevant fresh news items: {len(selected)} (mode={selected_mode})")
+    return selected
 
 
 def _available_ai_provider() -> str | None:

@@ -52,6 +52,8 @@ jobs:
           NEWS_IMAGE_CHECK_TIMEOUT: "8"
           NEWS_MEDIA_MAX_IMAGES: "3"
           NEWS_MAX_REDDIT_STREAK: "1"
+          NEWS_FEED_TIMEOUT: "10"
+          NEWS_FILTER_MODE: "thematic"
           NEWS_STATE_FILE: "news_state.json"
         run: python news_poster.py
 
