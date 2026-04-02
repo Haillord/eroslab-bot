@@ -145,11 +145,11 @@ def _build_fallback_body(content_type, likes, safe_tags):
     subject = _pick_subject_tag(safe_tags)
     if content_type == "ai":
         if subject:
-            return f"AI-сцена с акцентом на {subject.lower()}."
-        return f"Свежий AI-рендер, уже {likes} реакций в ленте."
+            return f"Атмосферный AI-кадр с акцентом на {subject.lower()}."
+        return "Свежий AI-кадр с выразительной подачей."
     if subject:
-        return f"3D-сцена с акцентом на {subject.lower()}."
-    return f"Свежий 3D-клип, уже {likes} реакций в ленте."
+        return f"Выразительная 3D-сцена с акцентом на {subject.lower()}."
+    return "Свежая 3D-сцена с акцентом на образ."
 
 
 def _build_hook_line(style, content_type, safe_tags, width, height):
@@ -312,6 +312,8 @@ def _generate_ai_body(content_type, rating, likes, safe_tags, tech_block):
         "Сделай короткий пост на русском для NSFW Telegram канала.\n"
         "Тон: живой, уверенный, без кринжа и без канцелярита.\n"
         "Ограничения: 1-2 коротких предложения, без markdown, без ссылок, без эмодзи.\n"
+        "Не упоминай разрешение, размер файла, aspect ratio, рейтинг и лайки.\n"
+        "Не используй сухие техно-формулировки.\n"
         f"Контент: {content_type.upper()}, rating={rating}, likes={likes}.\n"
         f"Теги: {', '.join(safe_tags[:10]) if safe_tags else 'нет'}.\n"
         f"Тех.данные: {tech_block if tech_block else 'нет'}.\n"
@@ -367,16 +369,8 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
     formatted_date = _format_date(date)
 
     tech_lines = []
-    if resolution and aspect_ratio and formatted_size:
-        tech_lines.append(f"⧉ {resolution} · {aspect_ratio} · {formatted_size}")
-    elif resolution and aspect_ratio:
-        tech_lines.append(f"⧉ {resolution} · {aspect_ratio}")
-    elif resolution and formatted_size:
-        tech_lines.append(f"⧉ {resolution} · {formatted_size}")
-    elif resolution:
+    if resolution:
         tech_lines.append(f"⧉ {resolution}")
-    elif formatted_size:
-        tech_lines.append(f"⧉ {formatted_size}")
 
     if formatted_date:
         tech_lines.append(f"📅 {formatted_date}")
