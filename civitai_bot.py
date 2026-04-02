@@ -788,14 +788,34 @@ def fetch_and_pick_top_sfm_video():
     Берем Rule34 3D video выдачу, фильтруем по SFM-тегам и лайкам,
     затем выбираем самый залайканный свежий элемент.
     """
-    items = fetch_rule34(
-        limit=max(50, SFM_PRIVATE_FETCH_LIMIT),
-        content_type="3d",
-        media_type="video",
-    )
+    query_variants = [
+        "source_filmmaker animated rating:explicit -2d",
+        "source_filmmaker video rating:explicit -2d",
+        "sfm animated rating:explicit -2d",
+        "sfm video rating:explicit -2d",
+    ]
+
+    items = []
+    for query in query_variants:
+        batch = fetch_rule34(
+            tags=query,
+            limit=max(50, SFM_PRIVATE_FETCH_LIMIT),
+            content_type="3d",
+            media_type="video",
+        )
+        if batch:
+            items.extend(batch)
+            logger.info(f"SFM private mode: query '{query}' returned {len(batch)} items")
+
     if not items:
-        logger.info("SFM private mode: no items from Rule34")
+        logger.info("SFM private mode: no items from Rule34 SFM queries")
         return None
+
+    dedup = {}
+    for i in items:
+        if i.get("id"):
+            dedup[i["id"]] = i
+    items = list(dedup.values())
 
     fresh = [
         i for i in items
