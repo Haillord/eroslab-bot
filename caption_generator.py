@@ -41,6 +41,8 @@ AI_DRY_RUN = os.environ.get("AI_DRY_RUN", "false").lower() in ("1", "true", "yes
 ENABLE_AI_CTA = os.environ.get("ENABLE_AI_CTA", "true").lower() in ("1", "true", "yes", "on")
 AI_PROVIDER = os.environ.get("AI_PROVIDER", "auto").strip().lower()
 AI_TIMEOUT_SEC = int(os.environ.get("AI_TIMEOUT_SEC", "12"))
+AI_BODY_MIN_CHARS = int(os.environ.get("AI_BODY_MIN_CHARS", "100"))
+AI_BODY_MAX_CHARS = int(os.environ.get("AI_BODY_MAX_CHARS", "220"))
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
@@ -357,7 +359,8 @@ def _generate_ai_body(content_type, rating, likes, safe_tags, tech_block):
     base_prompt = (
         "Сделай короткий пост на русском для NSFW Telegram канала.\n"
         "Тон: живой, разговорный, уверенный.\n"
-        "Ограничения: две короткие строки, общий объём 120-160 символов, без markdown, ссылок и эмодзи.\n"
+        f"Ограничения: 2-3 короткие строки, объём {AI_BODY_MIN_CHARS}-{AI_BODY_MAX_CHARS} символов, "
+        "без markdown, ссылок и эмодзи.\n"
         "Не упоминай разрешение, размер файла, aspect ratio, рейтинг и лайки.\n"
         "Не используй сухие техно-формулировки.\n"
         "Избегай кринж-слов: 'полная женщина', 'идеальная фигура', 'сочная', 'пышка'.\n"
@@ -378,14 +381,33 @@ def _generate_ai_body(content_type, rating, likes, safe_tags, tech_block):
     # Second pass: anti-cringe cleanup.
     system_2 = (
         "Очисти текст от неестественных и повторяющихся формулировок. "
-        "Сделай звучание нативным и живым. Две короткие строки, 120-160 символов. "
+        f"Сделай звучание нативным и живым. 2-3 строки, {AI_BODY_MIN_CHARS}-{AI_BODY_MAX_CHARS} символов. "
         "Верни только итоговый текст."
     )
     refined = _call_ai_chat(draft, system_2, max_tokens=120, temperature=0.3, retries=2)
     final_text = refined or draft
 
-    if len(final_text) > 280:
-        final_text = final_text[:277].rstrip() + "..."
+    if len(final_text) < AI_BODY_MIN_CHARS:
+        expand_prompt = (
+            f"Расширь текст до {AI_BODY_MIN_CHARS}-{AI_BODY_MAX_CHARS} символов, "
+            "оставив тот же смысл. 2-3 строки, без ссылок и эмодзи.\n\n"
+            f"Текст:\n{final_text}"
+        )
+        expanded = _call_ai_chat(
+            expand_prompt,
+            "Ты редактор: делаешь текст чуть длиннее, но живым и естественным.",
+            max_tokens=140,
+            temperature=0.5,
+            retries=1,
+        )
+        if expanded:
+            final_text = expanded
+
+    if len(final_text) > AI_BODY_MAX_CHARS + 30:
+        final_text = final_text[:AI_BODY_MAX_CHARS + 27].rstrip() + "..."
+
+    if len(final_text) < 40:
+        return None
 
     return final_text.strip() if final_text else None
 
