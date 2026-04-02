@@ -96,6 +96,15 @@ HARD_BLOCK_ILLEGAL_KEYWORDS = {
     "loli", "shota", "minor", "underage", "child", "cp", "teenage",
 }
 
+GENERIC_NEWS_TITLES = {
+    "visual novels",
+    "latest posts",
+    "new posts",
+    "hot posts",
+    "top posts",
+    "community",
+}
+
 RELEVANCE_GAME_KEYWORDS = {
     "steam", "itch.io", "patreon", "dlsite", "mod", "modding", "workshop",
     "release", "demo", "wishlist", "patch", "update", "build", "game",
@@ -202,6 +211,30 @@ def _normalize_link(link: str) -> str:
     parsed = urlparse(str(link).strip())
     base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
     return base.rstrip("/")
+
+
+def _is_generic_reddit_or_index_link(item: NewsItem) -> bool:
+    """
+    Filters out low-value links like subreddit root pages or generic index pages.
+    """
+    link = str(item.link or "").lower().strip()
+    title = str(item.title or "").lower().strip()
+
+    # Reddit root/subreddit links without concrete post/comment target.
+    if "reddit.com/r/" in link and "/comments/" not in link:
+        return True
+
+    # Generic forum/feed index pages.
+    if re.search(r"/(forums?|community|tag|tags|categories|index)(/|$)", link):
+        if "/threads/" not in link and "/posts/" not in link and "/comments/" not in link:
+            return True
+
+    # Too generic title cards.
+    if title in GENERIC_NEWS_TITLES:
+        return True
+    if len(title) < 10:
+        return True
+    return False
 
 
 def _detect_source_kind(feed_url: str, item_link: str) -> str:
@@ -338,6 +371,8 @@ def _is_relevant(item: NewsItem) -> bool:
     """
     blob = f"{item.title} {item.summary}".lower()
     title_blob = item.title.lower()
+    if _is_generic_reddit_or_index_link(item):
+        return False
     if any(x in blob for x in EXCLUDE_KEYWORDS):
         return False
     if any(x in blob for x in POLICY_PAYMENT_EXCLUDE):
@@ -371,6 +406,8 @@ def _is_relevant_soft(item: NewsItem) -> bool:
     - no mandatory release/update signal
     """
     blob = f"{item.title} {item.summary}".lower()
+    if _is_generic_reddit_or_index_link(item):
+        return False
     if any(x in blob for x in EXCLUDE_KEYWORDS):
         return False
     if any(x in blob for x in POLICY_PAYMENT_EXCLUDE):
@@ -395,6 +432,8 @@ def _is_relevant_nsfw_only(item: NewsItem) -> bool:
     any erotica/nsfw signal passes (except hard excluded policy topics).
     """
     blob = f"{item.title} {item.summary}".lower()
+    if _is_generic_reddit_or_index_link(item):
+        return False
     if any(x in blob for x in EXCLUDE_KEYWORDS):
         return False
     if any(x in blob for x in HARD_BLOCK_ILLEGAL_KEYWORDS):
