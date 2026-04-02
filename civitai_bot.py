@@ -383,14 +383,79 @@ def get_video_thumbnail(data: bytes, seek_sec: float = 2.0) -> bytes:
 
 # ==================== RETRY ДЛЯ TELEGRAM ====================
 async def send_with_retry(func, *args, retries=3, **kwargs):
+    def _rewind_file_like(obj):
+        if obj is None:
+            return
+        try:
+            if hasattr(obj, "seek"):
+                obj.seek(0)
+        except Exception:
+            pass
+
+    def _rewind_payload():
+        for value in args:
+            _rewind_file_like(value)
+        for key in ("photo", "video", "animation", "document", "thumbnail"):
+            _rewind_file_like(kwargs.get(key))
+        media = kwargs.get("media")
+        if isinstance(media, list):
+            for item in media:
+                media_obj = getattr(item, "media", None)
+                _rewind_file_like(media_obj)
+
     for attempt in range(retries):
         try:
+            _rewind_payload()
             return await func(*args, **kwargs)
         except Exception as e:
             if attempt == retries - 1:
                 raise
             logger.warning(f"Telegram send failed (attempt {attempt + 1}/{retries}): {e}")
             await asyncio.sleep(2)
+
+
+def _fit_photo_size_for_telegram(image_data: bytes, max_size: int = 10 * 1024 * 1024) -> bytes:
+    """
+    Telegram sendPhoto hard-limit is 10 MB.
+    If payload is larger, flatten to JPEG and reduce quality/resolution gradually.
+    """
+    if not image_data or len(image_data) <= max_size:
+        return image_data
+
+    try:
+        img = Image.open(BytesIO(image_data))
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+
+        # Try quality-only first.
+        for quality in (92, 88, 84, 80, 76, 72, 68):
+            out = BytesIO()
+            img.save(out, format="JPEG", quality=quality, optimize=True)
+            candidate = out.getvalue()
+            if len(candidate) <= max_size:
+                logger.info(f"Photo recompressed to fit Telegram limit: {len(candidate)} bytes (q={quality})")
+                return candidate
+
+        # If still too large, downscale progressively.
+        width, height = img.size
+        for scale in (0.95, 0.9, 0.85, 0.8, 0.75):
+            new_w = max(1, int(width * scale))
+            new_h = max(1, int(height * scale))
+            resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            out = BytesIO()
+            resized.save(out, format="JPEG", quality=76, optimize=True)
+            candidate = out.getvalue()
+            if len(candidate) <= max_size:
+                logger.info(
+                    "Photo downscaled to fit Telegram limit: "
+                    f"{len(candidate)} bytes ({width}x{height} -> {new_w}x{new_h})"
+                )
+                return candidate
+    except Exception as e:
+        logger.warning(f"Could not fit photo size for Telegram: {e}")
+
+    # Keep original on failure; sender will still handle/report.
+    return image_data
 
 # ==================== ТЕГИ ====================
 def extract_tags(item):
@@ -1020,6 +1085,7 @@ async def send_draft_to_admin(bot: Bot, item: dict, caption: str):
             r = requests.get(item.get("url"), timeout=60)
             r.raise_for_status()
             image_data = _apply_watermark_for_image_bytes(r.content, item.get("url", ""))
+            image_data = _fit_photo_size_for_telegram(image_data)
             photo_io = BytesIO(image_data)
             photo_io.name = "draft_image.jpg"
             await send_with_retry(
@@ -1076,6 +1142,7 @@ async def publish_item_to_channel(bot: Bot, item: dict, caption: str):
             r = requests.get(item.get("url"), timeout=60)
             r.raise_for_status()
             image_data = _apply_watermark_for_image_bytes(r.content, item.get("url", ""))
+            image_data = _fit_photo_size_for_telegram(image_data)
             photo_io = BytesIO(image_data)
             photo_io.name = "image.jpg"
             await send_with_retry(
@@ -1568,6 +1635,7 @@ async def main():
                     pack_entry["data"],
                     pack_entry["item"].get("url", ""),
                 )
+                watermarked_data = _fit_photo_size_for_telegram(watermarked_data)
                 photo_io = BytesIO(watermarked_data)
                 photo_io.name = f"image_{index + 1}.jpg"
                 if index == 0:
@@ -1585,6 +1653,7 @@ async def main():
         else:
             logger.info("Sending as image with watermark")
             watermarked_data = _apply_watermark_for_image_bytes(data, item["url"])
+            watermarked_data = _fit_photo_size_for_telegram(watermarked_data)
             photo_io = BytesIO(watermarked_data)
             photo_io.name = "image.jpg"
             await send_with_retry(
