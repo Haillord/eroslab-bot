@@ -33,7 +33,7 @@ TECHNICAL_TAGS = {
     "stable_diffusion", "novelai", "midjourney", "lora"
 }
 
-MAX_HASHTAGS = 6
+MAX_HASHTAGS = 4
 
 ENABLE_AI_CAPTION = os.environ.get("ENABLE_AI_CAPTION", "false").lower() in ("1", "true", "yes", "on")
 AI_DRY_RUN = os.environ.get("AI_DRY_RUN", "false").lower() in ("1", "true", "yes", "on")
@@ -45,7 +45,7 @@ GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
 ENABLE_STYLE_BLOCK = os.environ.get("ENABLE_STYLE_BLOCK", "true").lower() in ("1", "true", "yes", "on")
 STYLE_BLOCK_MAX_ITEMS = int(os.environ.get("STYLE_BLOCK_MAX_ITEMS", "3"))
-CAPTION_STYLE = os.environ.get("CAPTION_STYLE", "auto").strip().lower()
+CAPTION_STYLE = os.environ.get("CAPTION_STYLE", "minimal").strip().lower()
 
 CRINGE_TAG_HINTS = {
     "dynamic", "moments", "details", "fidelity", "thrust", "shaking",
@@ -54,7 +54,13 @@ CRINGE_TAG_HINTS = {
 
 STYLE_TAG_STOP = {
     "solo", "woman", "girl", "female", "image", "video", "clip",
-    "high", "quality", "detail", "best", "art", "ai", "3d"
+    "high", "quality", "detail", "best", "art", "ai", "3d",
+    "bed", "bedroom", "room", "scene", "background"
+}
+
+NSFW_TOKEN_BLOCKLIST = {
+    "penis", "cock", "cum", "pussy", "anal", "nude", "naked",
+    "blowjob", "fetish", "creampie", "bdsm", "genitals", "balls"
 }
 
 STYLE_VARIANTS = ("classic", "story", "minimal")
@@ -72,6 +78,9 @@ def _safe_tags(tags):
         if t_lower.count("_") > 2:
             continue
         if any(c.isdigit() for c in t_lower):
+            continue
+        parts = [p for p in t_lower.split("_") if p]
+        if any(p in NSFW_TOKEN_BLOCKLIST for p in parts):
             continue
         result.append(str(t))
     return result
@@ -112,7 +121,7 @@ def _build_style_block(body_text):
     if not text:
         return ""
 
-    return f"\n<blockquote>{_escape_html(text)}</blockquote>"
+    return f"<blockquote>{_escape_html(text)}</blockquote>"
 
 
 def _pick_caption_style():
