@@ -24,6 +24,7 @@ import telegram
 from telegram import Bot
 from caption_generator import generate_caption
 from rule34_api import fetch_rule34
+from watermark import add_watermark, should_add_watermark
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -33,6 +34,8 @@ REVIEW_MODE = os.environ.get("REVIEW_MODE", "false").lower() in ("1", "true", "y
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 
 WATERMARK_TEXT   = "📣 @eroslabai"
+WATERMARK_IMAGE_TEXT = os.environ.get("WATERMARK_IMAGE_TEXT", "@eroslabai")
+WATERMARK_IMAGE_OPACITY = float(os.environ.get("WATERMARK_IMAGE_OPACITY", "0.3"))
 MIN_LIKES        = 10
 MIN_CIVITAI_LIKES = int(os.environ.get("MIN_CIVITAI_LIKES", "1"))
 ALLOW_MATURE_FALLBACK = os.environ.get("ALLOW_MATURE_FALLBACK", "false").lower() in ("1", "true", "yes", "on")
@@ -41,6 +44,9 @@ ENABLE_VIDEO_QOS = os.environ.get("ENABLE_VIDEO_QOS", "true").lower() in ("1", "
 MIN_BITRATE_480P  = int(os.environ.get("MIN_BITRATE_480P", "900"))
 MIN_BITRATE_720P  = int(os.environ.get("MIN_BITRATE_720P", "1400"))
 MIN_BITRATE_1080P = int(os.environ.get("MIN_BITRATE_1080P", "2200"))
+IMAGE_PACK_ENABLED = os.environ.get("IMAGE_PACK_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+IMAGE_PACK_SIZE = max(1, int(os.environ.get("IMAGE_PACK_SIZE", "3")))
+IMAGE_PACK_CANDIDATE_POOL = max(IMAGE_PACK_SIZE, int(os.environ.get("IMAGE_PACK_CANDIDATE_POOL", "18")))
 
 # Временно отключить Rule34 (True = только CivitAI для тестов)
 TEST_CIVITAI_ONLY = False
@@ -681,6 +687,42 @@ def _is_video_item(item: dict) -> bool:
         return False
     return _is_video(item.get("url", ""))
 
+
+def _is_photo_item(item: dict) -> bool:
+    mime = (item.get("mime") or "").lower()
+    if mime == "image/gif" or _is_gif(item.get("url", "")):
+        return False
+    return not _is_video_item(item)
+
+
+def _collect_pack_candidates(seed_item: dict, limit: int) -> list[dict]:
+    source = str(seed_item.get("source") or "").strip().lower()
+    if source not in ("civitai", "rule34") or limit <= 0:
+        return []
+
+    try:
+        if source == "civitai":
+            items = fetch_civitai()
+        else:
+            items = fetch_rule34(limit=100, content_type="mixed", media_type="image")
+    except Exception as e:
+        logger.warning(f"Could not fetch candidates for image pack: {e}")
+        return []
+
+    excluded_ids = set(posted_ids)
+    excluded_ids.add(seed_item.get("id"))
+
+    fresh = [
+        i for i in items
+        if i.get("id") not in excluded_ids
+        and _is_photo_item(i)
+        and not has_blacklisted(i.get("tags", []))
+    ]
+
+    # Берем более популярные элементы, чтобы пак был релевантнее.
+    fresh.sort(key=lambda x: max(0, int(x.get("likes", 0))), reverse=True)
+    return fresh[:limit]
+
 def _pick_by_content_type(fresh):
     """70/30 видео или фото. Если нужного типа нет — берём что есть."""
     content_type = "video" if random.random() < 0.7 else "image"
@@ -843,6 +885,74 @@ def build_caption_from_item(item, width=None, height=None, file_size=None):
     )
 
 
+def _build_pack_caption_meta(image_pack: list[dict]) -> dict:
+    """
+    Агрегирует метаданные для общего caption альбома.
+    Приоритет:
+    - теги: общие по всем + топ уникальных
+    - likes: медиана по паку
+    - rating/date: от первого элемента (seed), чтобы сохранить контекст источника
+    """
+    if not image_pack:
+        return {"tags": [], "likes": 0, "rating": None, "date": None}
+
+    items = [entry.get("item", {}) for entry in image_pack if isinstance(entry, dict)]
+    items = [i for i in items if isinstance(i, dict)]
+    if not items:
+        return {"tags": [], "likes": 0, "rating": None, "date": None}
+
+    normalized_lists = []
+    for item in items:
+        tags = clean_tags(item.get("tags", []) or [])
+        normalized_lists.append(tags)
+
+    common_tags = set(normalized_lists[0]) if normalized_lists else set()
+    for tag_list in normalized_lists[1:]:
+        common_tags &= set(tag_list)
+
+    tag_scores = {}
+    for item in items:
+        likes = max(0, int(item.get("likes", 0) or 0))
+        for tag in clean_tags(item.get("tags", []) or []):
+            tag_scores[tag] = tag_scores.get(tag, 0) + (likes + 1)
+
+    shared_sorted = sorted(common_tags, key=lambda t: tag_scores.get(t, 0), reverse=True)
+    unique_sorted = sorted(
+        [t for t in tag_scores.keys() if t not in common_tags],
+        key=lambda t: tag_scores.get(t, 0),
+        reverse=True
+    )
+
+    # Даем caption-генератору компактный, но информативный набор тегов.
+    merged_tags = (shared_sorted[:10] + unique_sorted[:12])[:18]
+
+    likes_values = sorted(max(0, int(i.get("likes", 0) or 0)) for i in items)
+    likes_median = likes_values[len(likes_values) // 2] if likes_values else 0
+
+    seed = items[0]
+    return {
+        "tags": merged_tags,
+        "likes": likes_median,
+        "rating": seed.get("rating"),
+        "date": seed.get("createdAt"),
+    }
+
+
+def _apply_watermark_for_image_bytes(image_data: bytes, url: str) -> bytes:
+    if not image_data or not should_add_watermark(url or ""):
+        return image_data
+    try:
+        opacity = max(0.0, min(1.0, WATERMARK_IMAGE_OPACITY))
+        return add_watermark(
+            image_data=image_data,
+            text=WATERMARK_IMAGE_TEXT,
+            opacity=opacity,
+        )
+    except Exception as e:
+        logger.warning(f"Watermark apply failed, using original image: {e}")
+        return image_data
+
+
 def _parse_admin_command(text: str):
     raw = (text or "").strip()
     if not raw.startswith("/"):
@@ -905,15 +1015,32 @@ async def send_draft_to_admin(bot: Bot, item: dict, caption: str):
             read_timeout=60,
         )
     else:
-        await send_with_retry(
-            bot.send_photo,
-            chat_id=chat_id,
-            photo=item.get("url"),
-            caption=draft_caption,
-            parse_mode="HTML",
-            write_timeout=60,
-            read_timeout=60,
-        )
+        try:
+            r = requests.get(item.get("url"), timeout=60)
+            r.raise_for_status()
+            image_data = _apply_watermark_for_image_bytes(r.content, item.get("url", ""))
+            photo_io = BytesIO(image_data)
+            photo_io.name = "draft_image.jpg"
+            await send_with_retry(
+                bot.send_photo,
+                chat_id=chat_id,
+                photo=photo_io,
+                caption=draft_caption,
+                parse_mode="HTML",
+                write_timeout=60,
+                read_timeout=60,
+            )
+        except Exception as e:
+            logger.warning(f"Draft watermark flow failed, fallback to URL send: {e}")
+            await send_with_retry(
+                bot.send_photo,
+                chat_id=chat_id,
+                photo=item.get("url"),
+                caption=draft_caption,
+                parse_mode="HTML",
+                write_timeout=60,
+                read_timeout=60,
+            )
 
     await send_review_instructions(bot, chat_id, item["id"])
 
@@ -944,15 +1071,32 @@ async def publish_item_to_channel(bot: Bot, item: dict, caption: str):
             read_timeout=60,
         )
     else:
-        await send_with_retry(
-            bot.send_photo,
-            chat_id=TELEGRAM_CHANNEL_ID,
-            photo=item.get("url"),
-            caption=caption,
-            parse_mode="HTML",
-            write_timeout=60,
-            read_timeout=60,
-        )
+        try:
+            r = requests.get(item.get("url"), timeout=60)
+            r.raise_for_status()
+            image_data = _apply_watermark_for_image_bytes(r.content, item.get("url", ""))
+            photo_io = BytesIO(image_data)
+            photo_io.name = "image.jpg"
+            await send_with_retry(
+                bot.send_photo,
+                chat_id=TELEGRAM_CHANNEL_ID,
+                photo=photo_io,
+                caption=caption,
+                parse_mode="HTML",
+                write_timeout=60,
+                read_timeout=60,
+            )
+        except Exception as e:
+            logger.warning(f"Publish watermark flow failed, fallback to URL send: {e}")
+            await send_with_retry(
+                bot.send_photo,
+                chat_id=TELEGRAM_CHANNEL_ID,
+                photo=item.get("url"),
+                caption=caption,
+                parse_mode="HTML",
+                write_timeout=60,
+                read_timeout=60,
+            )
 
 
 async def process_admin_updates(bot: Bot):
@@ -1235,6 +1379,61 @@ async def main():
         flush_stats_once()
         return
 
+    # ========== СБОРКА ПАКА ФОТО (только CivitAI/Rule34) ==========
+    image_pack = [{"item": item, "data": data, "hash": img_hash}]
+    use_image_pack = False
+
+    if IMAGE_PACK_ENABLED and _is_photo_item(item) and item.get("source") in ("civitai", "rule34") and IMAGE_PACK_SIZE > 1:
+        pack_hashes = {img_hash}
+        candidates = _collect_pack_candidates(item, IMAGE_PACK_CANDIDATE_POOL)
+        logger.info(f"Image pack candidates collected: {len(candidates)}")
+
+        for candidate in candidates:
+            if len(image_pack) >= IMAGE_PACK_SIZE:
+                break
+
+            try:
+                r_extra = requests.get(candidate["url"], timeout=60)
+                r_extra.raise_for_status()
+                extra_data = r_extra.content
+                extra_ctype = (r_extra.headers.get("Content-Type") or "").lower()
+            except Exception as e:
+                logger.warning(f"Image pack skip (download error): {candidate.get('id')} ({e})")
+                continue
+
+            if len(extra_data) > MAX_FILE_SIZE:
+                logger.warning(f"Image pack skip (too large): {candidate.get('id')}")
+                continue
+
+            candidate_mime = (candidate.get("mime") or "").lower()
+            candidate_is_gif = (
+                "image/gif" in extra_ctype
+                or candidate_mime == "image/gif"
+                or _is_gif(candidate.get("url", ""))
+            )
+            candidate_is_video = (
+                (extra_ctype.startswith("video/") or candidate_mime.startswith("video/") or _is_video(candidate.get("url", "")))
+                and not candidate_is_gif
+            )
+            if candidate_is_gif or candidate_is_video:
+                continue
+
+            if not check_media_size(extra_data, candidate["url"]):
+                continue
+
+            extra_hash = hashlib.sha256(extra_data).hexdigest()
+            if extra_hash in posted_hashes or extra_hash in pack_hashes:
+                continue
+
+            pack_hashes.add(extra_hash)
+            image_pack.append({"item": candidate, "data": extra_data, "hash": extra_hash})
+
+        use_image_pack = len(image_pack) >= IMAGE_PACK_SIZE
+        logger.info(
+            f"Image pack mode: enabled={IMAGE_PACK_ENABLED}, "
+            f"target={IMAGE_PACK_SIZE}, built={len(image_pack)}, use_pack={use_image_pack}"
+        )
+
     # ========== THUMBNAIL ДЛЯ ВИДЕО (для vision) ==========
     caption_image_data = data  # для фото — оригинал, для видео — fallback
 
@@ -1281,22 +1480,44 @@ async def main():
     # Получаем дату из метаданных
     post_date = item.get("createdAt")
 
+    caption_tags = item["tags"]
+    caption_rating = item["rating"]
+    caption_likes = item["likes"]
+    caption_date = post_date
+    caption_width = img_width
+    caption_height = img_height
+    caption_file_size = file_size_bytes
+
+    if use_image_pack:
+        pack_meta = _build_pack_caption_meta(image_pack)
+        caption_tags = pack_meta["tags"] or caption_tags
+        caption_rating = pack_meta["rating"] if pack_meta["rating"] is not None else caption_rating
+        caption_likes = pack_meta["likes"]
+        caption_date = pack_meta["date"] or caption_date
+        # Для альбома не фиксируем одно разрешение/размер, чтобы не вводить в заблуждение.
+        caption_width = None
+        caption_height = None
+        caption_file_size = None
+
     caption = generate_caption(
-        tags=item["tags"],
-        rating=item["rating"],
-        likes=item["likes"],
+        tags=caption_tags,
+        rating=caption_rating,
+        likes=caption_likes,
         image_data=caption_image_data,
         image_url=item["url"] if not is_video else None,
         watermark=WATERMARK_TEXT,
         suggestion="💬 Предложка: @Haillord",
         content_type=content_type,
-        width=img_width,
-        height=img_height,
-        file_size=file_size_bytes,
-        date=post_date
+        width=caption_width,
+        height=caption_height,
+        file_size=caption_file_size,
+        date=caption_date
     )
 
-    logger.info(f"Tags for caption ({len(item['tags'])}): {item['tags'][:8]}")
+    if use_image_pack:
+        caption += f"\n\n📦 Пак: {len(image_pack)} фото"
+
+    logger.info(f"Tags for caption ({len(caption_tags)}): {caption_tags[:8]}")
     logger.info(f"Caption preview: {caption[:100]}")
 
     try:
@@ -1328,9 +1549,32 @@ async def main():
                 write_timeout=60,
                 read_timeout=60
             )
+        elif use_image_pack:
+            logger.info(f"Sending as image pack ({len(image_pack)} photos)")
+            media = []
+            for index, pack_entry in enumerate(image_pack):
+                watermarked_data = _apply_watermark_for_image_bytes(
+                    pack_entry["data"],
+                    pack_entry["item"].get("url", ""),
+                )
+                photo_io = BytesIO(watermarked_data)
+                photo_io.name = f"image_{index + 1}.jpg"
+                if index == 0:
+                    media.append(telegram.InputMediaPhoto(media=photo_io, caption=caption, parse_mode="HTML"))
+                else:
+                    media.append(telegram.InputMediaPhoto(media=photo_io))
+
+            await send_with_retry(
+                bot.send_media_group,
+                chat_id=TELEGRAM_CHANNEL_ID,
+                media=media,
+                write_timeout=60,
+                read_timeout=60
+            )
         else:
-            logger.info("Sending as image without watermark")
-            photo_io = BytesIO(data)
+            logger.info("Sending as image with watermark")
+            watermarked_data = _apply_watermark_for_image_bytes(data, item["url"])
+            photo_io = BytesIO(watermarked_data)
             photo_io.name = "image.jpg"
             await send_with_retry(
                 bot.send_photo,
@@ -1342,10 +1586,17 @@ async def main():
                 read_timeout=60
             )
 
-        posted_ids.add(item["id"])
-        posted_hashes.add(img_hash)
+        for pack_entry in image_pack if use_image_pack else [{"item": item, "hash": img_hash}]:
+            entry_item = pack_entry["item"]
+            entry_hash = pack_entry["hash"]
+            if entry_item.get("id"):
+                posted_ids.add(entry_item["id"])
+            posted_hashes.add(entry_hash)
         save_all()
-        logger.info(f"Successfully posted: {item['id']}")
+        logger.info(
+            f"Successfully posted: {item['id']}"
+            + (f" (image pack size={len(image_pack)})" if use_image_pack else "")
+        )
         run_metrics["posted"] += 1
         flush_stats_once()
 
