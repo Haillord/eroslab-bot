@@ -78,6 +78,20 @@ EXCLUDE_KEYWORDS = {
     "politics", "election", "war", "stock market",
 }
 
+POLICY_PAYMENT_EXCLUDE = {
+    "visa", "mastercard", "payment provider", "payment processors",
+    "processor", "ftc", "commission", "regulation", "regulator",
+    "lawsuit", "legal", "law", "censorship", "compliance",
+    "bank", "banking", "policy change", "policy",
+}
+
+RELEASE_SIGNAL_KEYWORDS = {
+    "release", "released", "launch", "launched", "demo", "out now",
+    "patch", "update", "updated", "hotfix", "roadmap", "devlog",
+    "new build", "build", "v0.", "v1.", "alpha", "beta", "steam page",
+    "wishlist", "mod", "modding", "workshop", "dlc",
+}
+
 
 @dataclass
 class NewsItem:
@@ -149,15 +163,22 @@ def _is_relevant(item: NewsItem) -> bool:
     title_blob = item.title.lower()
     if any(x in blob for x in EXCLUDE_KEYWORDS):
         return False
+    if any(x in blob for x in POLICY_PAYMENT_EXCLUDE):
+        return False
 
     ero_hits = _keyword_hits(blob, RELEVANCE_ERO_KEYWORDS)
     game_hits = _keyword_hits(blob, RELEVANCE_GAME_KEYWORDS)
     ai_hits = _keyword_hits(blob, RELEVANCE_AI_KEYWORDS)
     title_ero_hits = _keyword_hits(title_blob, RELEVANCE_ERO_KEYWORDS)
+    release_hits = _keyword_hits(blob, RELEASE_SIGNAL_KEYWORDS)
+    title_release_hits = _keyword_hits(title_blob, RELEASE_SIGNAL_KEYWORDS)
 
     # Strict by default: keep only erotica-related news with gaming/AI context.
     # This prevents random generic gaming posts from slipping in.
     if title_ero_hits == 0 and ero_hits < 2:
+        return False
+    # For this channel we prefer practical news (release/update/mod/demo).
+    if release_hits == 0 and title_release_hits == 0:
         return False
     if ero_hits >= 1 and (game_hits >= 1 or ai_hits >= 1):
         return True
