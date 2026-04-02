@@ -47,6 +47,12 @@ DEFAULT_NEWS_RSS_SOURCES = [
     "https://www.reddit.com/r/HentaiGames/new/.rss",
     "https://www.reddit.com/r/AdultGameReviews/new/.rss",
     "https://www.reddit.com/r/RenPy/new/.rss",
+    # --- ДЛЯ РУЧНОЙ МОДЕРАЦИИ (Много сырья) ---
+    "https://www.lewdgamereviews.com/feed/",
+    "https://api.gamejolt.com/rss/games/tag-nsfw",
+    "https://www.reddit.com/r/Eroge/new/.rss",
+    "https://www.reddit.com/r/WesternVisualNovels/new/.rss",
+    "https://www.reddit.com/r/3D_Animation_Games/new/.rss",
 ]
 
 
