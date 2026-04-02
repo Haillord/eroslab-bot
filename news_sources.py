@@ -9,39 +9,44 @@ import os
 
 
 DEFAULT_NEWS_RSS_SOURCES = [
-    # Core gaming + PC modding/news (filtered heavily in poster logic).
-    "https://www.pcgamer.com/rss/",
-    "https://www.rockpapershotgun.com/feed",
-    "https://www.dsogaming.com/feed/",
-    "https://www.pcgamesn.com/feed",
-    "https://www.vg247.com/feed/",
-    "https://www.gematsu.com/feed",
-    "https://www.destructoid.com/feed/",
-    "https://www.dualshockers.com/feed/",
-    "https://www.nichegamer.com/feed/",
-    "https://www.polygon.com/rss/index.xml",
-    "https://kotaku.com/rss",
-    # AI space (for "нейронки / tools / releases" bits).
-    "https://www.marktechpost.com/feed/",
-    "https://the-decoder.com/feed/",
-    "https://www.technologyreview.com/topic/artificial-intelligence/feed/",
-    # More niche / community-oriented sources for adult-game chatter.
-    "https://www.reddit.com/r/lewdgames/new/.rss",
-    "https://www.reddit.com/r/nsfwgaming/new/.rss",
-    "https://www.reddit.com/r/visualnovels/new/.rss",
-    "https://www.reddit.com/r/itchio/new/.rss",
-    "https://www.reddit.com/r/Steam/new/.rss",
-    # Communities that sometimes post adult VN/mod updates.
-    "https://www.reddit.com/r/adultgames/new/.rss",
-    "https://www.reddit.com/r/gamemods/new/.rss",
-    # Itch adult tags (often contains VN/sim project updates).
+    # --- ОСНОВНЫЕ АГРЕГАТОРЫ (Релизы и Апдейты) ---
+    "https://f95zone.to/forums/games.2/index.rss",       # Новые игры на F95
+    "https://f95zone.to/forums/game-updates.8/index.rss", # Апдейты старых хитов
+    "https://www.lewdgamer.com/feed/",                  # Главные новости NSFW-индустрии
+    "https://nichegamer.com/tag/nsfw/feed/",            # Только NSFW раздел NicheGamer
+
+    # --- ВИЗУАЛЬНЫЕ НОВЕЛЛЫ (VNs & Eroge) ---
+    "https://blog.mangagamer.org/feed/",                # Официальный блог MangaGamer (лицензии/релизы)
+    "https://jastusa.com/blog/feed",                    # Новости JAST USA
+    "https://vnsnow.com/feed/",                         # Новости и обзоры визуаллок
+    "https://vn-meido.com/forum/index.php?type=rss;action=.xml", # Сообщество по переводам и портам
+    
+    # --- REDDIT (Самое живое по теме модов и игр) ---
+    "https://www.reddit.com/r/lewdgames/new/.rss",      # Обсуждение и поиск игр
+    "https://www.reddit.com/r/nsfwgaming/new/.rss",     # Скриншоты и новости
+    "https://www.reddit.com/r/adultgames/new/.rss",     # Прямо по адресу
+    "https://www.reddit.com/r/ItchioNSFW/new/.rss",     # Самое свежее с Itch.io
+    "https://www.reddit.com/r/SteamNSFW/new/.rss",      # Что вышло в Стиме без цензуры
+    "https://www.reddit.com/r/symphonyoflewd/new/.rss", # Подборки и кураторство
+    "https://www.reddit.com/r/HentaiGames/new/.rss",    # Чистый хентай
+    "https://www.reddit.com/r/NSFW_Unity_Games/new/.rss", # Проекты на Unity (Patreon-стайл)
+
+    # --- СЕКС-МОДЫ (Sex Mods / Customization) ---
+    "https://www.reddit.com/r/sims4cc-nsfw/new/.rss",    # Моды для Симс (огромный пласт контента)
+    "https://www.reddit.com/r/SkyrimNSFW/new/.rss",      # Моды на Скайрим (классика)
+    "https://www.reddit.com/r/Cyberpunk衣/new/.rss",    # Моды на Киберпанк (если есть в RSS)
+    "https://www.loverslab.com/files/rss/1-latest-files.xml", # САМЫЙ ТОП (Новинки с LoversLab)
+
+    # --- ИГРОВЫЕ ПЛАТФОРМЫ (Тегированные) ---
     "https://itch.io/games/tag-adult.rss",
-    "https://itch.io/games/tag-visual-novel.rss",
-    "https://itch.io/games/tag-erotic.rss",
     "https://itch.io/games/tag-nsfw.rss",
-    # Additional candidate feeds (some may be sparse, parser handles that).
-    "https://f95zone.to/forums/games.2/index.rss",
-    "https://f95zone.to/forums/game-updates.8/index.rss",
+    "https://itch.io/games/tag-erotic.rss",
+    # --- ДОПОЛНИТЕЛЬНО ---
+    "https://www.lewdgamereviews.com/feed/",
+    "https://www.loverslab.com/files/rss/1-latest-files.xml", # ГЛАВНЫЙ по модам# Обзоры и аналитика
+    "https://www.reddit.com/r/HentaiGames/new/.rss",
+    "https://www.reddit.com/r/AdultGameReviews/new/.rss",
+    "https://www.reddit.com/r/RenPy/new/.rss",
 ]
 
 
