@@ -9,6 +9,7 @@ import os
 import random
 import time
 import json
+import base64
 from datetime import datetime
 from pathlib import Path
 
@@ -54,6 +55,8 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+ENABLE_AI_VISION = os.environ.get("ENABLE_AI_VISION", "true").lower() in ("1", "true", "yes", "on")
+OPENROUTER_VISION_MODEL = os.environ.get("OPENROUTER_VISION_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")
 ENABLE_STYLE_BLOCK = os.environ.get("ENABLE_STYLE_BLOCK", "true").lower() in ("1", "true", "yes", "on")
 STYLE_BLOCK_MAX_ITEMS = int(os.environ.get("STYLE_BLOCK_MAX_ITEMS", "3"))
 CAPTION_STYLE = os.environ.get("CAPTION_STYLE", "story").strip().lower()
@@ -423,9 +426,106 @@ def _call_ai_chat(prompt, system_prompt, max_tokens=140, temperature=0.8, retrie
     return None
 
 
-def _generate_ai_body(content_type, rating, likes, safe_tags, tech_block):
+def _guess_image_mime(image_data):
+    if not image_data or len(image_data) < 12:
+        return "image/jpeg"
+    if image_data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if image_data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if image_data.startswith(b"GIF87a") or image_data.startswith(b"GIF89a"):
+        return "image/gif"
+    if image_data[0:4] == b"RIFF" and image_data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
+def _build_image_data_url(image_data):
+    if not image_data:
+        return None
+    if len(image_data) > 2 * 1024 * 1024:
+        return None
+    mime = _guess_image_mime(image_data)
+    b64 = base64.b64encode(image_data).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
+def _call_ai_vision(prompt, system_prompt, image_data=None, image_url=None, max_tokens=110, temperature=0.2, retries=1):
+    if not ENABLE_AI_VISION or not OPENROUTER_API_KEY:
+        return None
+
+    resolved_image_url = image_url
+    if not resolved_image_url:
+        resolved_image_url = _build_image_data_url(image_data)
+    if not resolved_image_url:
+        return None
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": OPENROUTER_VISION_MODEL,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": resolved_image_url}},
+                ],
+            },
+        ],
+    }
+
+    for attempt in range(max(1, retries)):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=AI_TIMEOUT_SEC)
+            resp.raise_for_status()
+            data = resp.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = str(content).strip()
+            return content or None
+        except Exception as e:
+            if attempt == max(1, retries) - 1:
+                logger.warning(f"AI vision call failed (openrouter): {e}")
+                return None
+            time.sleep(0.6)
+    return None
+
+
+def _extract_visual_hint(content_type, image_data=None, image_url=None):
+    prompt = (
+        "Опиши визуально что в кадре для подписи NSFW-поста: "
+        "композиция, свет, настроение, динамика. "
+        "До 18 слов, без перечисления телесных деталей и без вульгарности."
+    )
+    system = (
+        "Ты даешь краткий нейтральный визуальный дескриптор для редактора подписи. "
+        "Верни одну строку без хэштегов."
+    )
+    hint = _call_ai_vision(
+        prompt,
+        system,
+        image_data=image_data,
+        image_url=image_url,
+        max_tokens=80,
+        temperature=0.1,
+        retries=1,
+    )
+    if not hint:
+        return None
+    return hint.replace("\n", " ").strip()
+
+
+def _generate_ai_body(content_type, rating, likes, safe_tags, tech_block, image_data=None, image_url=None):
     if not ENABLE_AI_CAPTION:
         return None
+
+    visual_hint = _extract_visual_hint(content_type, image_data=image_data, image_url=image_url)
 
     base_prompt = (
         "Сделай короткий пост на русском для NSFW Telegram канала.\n"
@@ -438,6 +538,7 @@ def _generate_ai_body(content_type, rating, likes, safe_tags, tech_block):
         "Избегай кринж-слов: 'полная женщина', 'идеальная фигура', 'сочная', 'пышка'.\n"
         f"Контент: {content_type.upper()}, rating={rating}, likes={likes}.\n"
         f"Теги: {', '.join(safe_tags[:10]) if safe_tags else 'нет'}.\n"
+        f"Визуальный контекст: {visual_hint if visual_hint else 'нет'}.\n"
         f"Тех.данные: {tech_block if tech_block else 'нет'}.\n"
         "Верни только текст подписи."
     )
@@ -559,7 +660,15 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
         height=height,
     )
 
-    ai_body = _generate_ai_body(content_type, rating, likes, safe_tags, tech_block)
+    ai_body = _generate_ai_body(
+        content_type,
+        rating,
+        likes,
+        safe_tags,
+        tech_block,
+        image_data=image_data,
+        image_url=image_url,
+    )
     if not ai_body:
         return fallback_caption
 
