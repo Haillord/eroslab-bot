@@ -200,7 +200,8 @@ def _assemble_caption(style, content_type, title_line, tech_block, body_text, st
         parts.append(hashtags)
 
     parts.append(footer)
-    return "\n\n".join(parts)
+    # Compact layout: single-line rhythm to avoid large empty gaps in Telegram.
+    return "\n".join(parts)
 
 
 def _format_file_size(size_bytes):
