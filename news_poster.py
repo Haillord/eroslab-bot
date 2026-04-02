@@ -26,7 +26,7 @@ from urllib.parse import urlparse
 
 import feedparser
 import requests
-from telegram import Bot
+from telegram import Bot, InputMediaPhoto
 
 from news_sources import get_news_sources
 
@@ -60,6 +60,7 @@ NEWS_REQUIRE_IMAGE = os.environ.get("NEWS_REQUIRE_IMAGE", "true").lower() in ("1
 NEWS_MIN_IMAGE_WIDTH = int(os.environ.get("NEWS_MIN_IMAGE_WIDTH", "700"))
 NEWS_MIN_IMAGE_HEIGHT = int(os.environ.get("NEWS_MIN_IMAGE_HEIGHT", "390"))
 NEWS_IMAGE_CHECK_TIMEOUT = int(os.environ.get("NEWS_IMAGE_CHECK_TIMEOUT", "8"))
+NEWS_MEDIA_MAX_IMAGES = int(os.environ.get("NEWS_MEDIA_MAX_IMAGES", "3"))
 
 
 RELEVANCE_ERO_KEYWORDS = {
@@ -529,6 +530,52 @@ def _pick_best_image_url(item: NewsItem) -> str:
     return best_url
 
 
+def _pick_best_image_urls(item: NewsItem, limit: int = 3) -> list[str]:
+    candidates = list(item.image_candidates or [])
+    if item.image_url and item.image_url not in candidates:
+        candidates.insert(0, item.image_url)
+    if not candidates:
+        return []
+
+    from io import BytesIO
+    from PIL import Image
+
+    scored = []
+    for url in candidates[:8]:
+        try:
+            resp = requests.get(url, timeout=NEWS_IMAGE_CHECK_TIMEOUT)
+            if resp.status_code != 200:
+                continue
+            ctype = str(resp.headers.get("Content-Type", "")).lower()
+            if "image" not in ctype:
+                continue
+            data = resp.content
+            if not data:
+                continue
+            img = Image.open(BytesIO(data))
+            width, height = img.size
+            score = _score_image_size(width, height)
+            if score >= 0:
+                scored.append((score, url))
+        except Exception:
+            continue
+
+    if not scored:
+        return []
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    ordered = []
+    seen = set()
+    for _, url in scored:
+        if url in seen:
+            continue
+        seen.add(url)
+        ordered.append(url)
+        if len(ordered) >= max(1, limit):
+            break
+    return ordered
+
+
 async def _post_news_items(items: list[NewsItem], posted_links: set[str]) -> int:
     if not TELEGRAM_BOT_TOKEN:
         logger.error("No TELEGRAM_BOT_TOKEN; abort.")
@@ -541,11 +588,21 @@ async def _post_news_items(items: list[NewsItem], posted_links: set[str]) -> int
         if normalized in posted_links:
             continue
         text = _build_post_text(item)
+        if len(text) > 1000:
+            text = text[:997].rstrip() + "..."
         try:
-            best_image = _pick_best_image_url(item)
-            if best_image:
-                # Better visual presentation: photo card + caption (like channel-style news posts).
-                await bot.send_photo(chat_id=TELEGRAM_CHANNEL_ID, photo=best_image, caption=text)
+            best_images = _pick_best_image_urls(item, limit=NEWS_MEDIA_MAX_IMAGES)
+            if best_images:
+                if len(best_images) == 1:
+                    await bot.send_photo(chat_id=TELEGRAM_CHANNEL_ID, photo=best_images[0], caption=text)
+                else:
+                    media = []
+                    for idx, url in enumerate(best_images):
+                        if idx == 0:
+                            media.append(InputMediaPhoto(media=url, caption=text))
+                        else:
+                            media.append(InputMediaPhoto(media=url))
+                    await bot.send_media_group(chat_id=TELEGRAM_CHANNEL_ID, media=media)
             elif NEWS_REQUIRE_IMAGE:
                 logger.info(f"Skip news without quality image: {item.title[:90]}")
                 continue
