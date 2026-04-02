@@ -57,6 +57,7 @@ GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
 ENABLE_AI_VISION = os.environ.get("ENABLE_AI_VISION", "true").lower() in ("1", "true", "yes", "on")
 OPENROUTER_VISION_MODEL = os.environ.get("OPENROUTER_VISION_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")
+OPENROUTER_VISION_FALLBACK_MODEL = os.environ.get("OPENROUTER_VISION_FALLBACK_MODEL", "google/gemma-3-27b-it:free")
 ENABLE_STYLE_BLOCK = os.environ.get("ENABLE_STYLE_BLOCK", "true").lower() in ("1", "true", "yes", "on")
 STYLE_BLOCK_MAX_ITEMS = int(os.environ.get("STYLE_BLOCK_MAX_ITEMS", "3"))
 CAPTION_STYLE = os.environ.get("CAPTION_STYLE", "story").strip().lower()
@@ -457,6 +458,7 @@ def _call_ai_vision(
     image_url=None,
     secondary_image_data=None,
     secondary_image_url=None,
+    model=None,
     max_tokens=110,
     temperature=0.2,
     retries=1,
@@ -482,7 +484,7 @@ def _call_ai_vision(
         "Content-Type": "application/json",
     }
     payload = {
-        "model": OPENROUTER_VISION_MODEL,
+        "model": model or OPENROUTER_VISION_MODEL,
         "temperature": temperature,
         "max_tokens": max_tokens,
         "messages": [
@@ -514,6 +516,12 @@ def _extract_visual_hint(
     secondary_image_data=None,
     secondary_image_url=None,
 ):
+    def _is_non_informative(value):
+        if not value:
+            return True
+        token = str(value).replace("\n", " ").strip().lower()
+        return token in {"none", "null", "n/a", "na", "no", "nope", "-"}
+
     if not ENABLE_AI_VISION:
         logger.info("Vision hint skipped: ENABLE_AI_VISION is disabled")
         return None
@@ -539,17 +547,35 @@ def _extract_visual_hint(
         image_url=image_url,
         secondary_image_data=secondary_image_data,
         secondary_image_url=secondary_image_url,
+        model=OPENROUTER_VISION_MODEL,
         max_tokens=80,
         temperature=0.1,
         retries=1,
     )
-    if not hint:
-        logger.info("Vision hint unavailable: empty response from vision model")
+
+    if _is_non_informative(hint) and OPENROUTER_VISION_FALLBACK_MODEL:
+        logger.info(
+            "Vision primary model returned empty/non-informative response. "
+            f"Trying fallback model: {OPENROUTER_VISION_FALLBACK_MODEL}"
+        )
+        hint = _call_ai_vision(
+            prompt,
+            system,
+            image_data=image_data,
+            image_url=image_url,
+            secondary_image_data=secondary_image_data,
+            secondary_image_url=secondary_image_url,
+            model=OPENROUTER_VISION_FALLBACK_MODEL,
+            max_tokens=80,
+            temperature=0.1,
+            retries=1,
+        )
+
+    if _is_non_informative(hint):
+        logger.info("Vision hint unavailable: empty/non-informative response from vision models")
         return None
+
     normalized = hint.replace("\n", " ").strip()
-    if normalized.lower() in {"none", "null", "n/a", "na", "no", "nope", "-"}:
-        logger.info("Vision hint unavailable: non-informative token from vision model")
-        return None
     logger.info(f"Vision hint used: {normalized[:80]}")
     return normalized
 
