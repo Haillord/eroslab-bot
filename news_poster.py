@@ -100,6 +100,7 @@ class NewsItem:
     summary: str
     source: str
     published_ts: float
+    image_url: str
 
 
 def _load_state() -> dict:
@@ -152,6 +153,51 @@ def _parse_published_ts(entry) -> float:
     if not dt:
         dt = datetime.now(timezone.utc)
     return dt.timestamp()
+
+
+def _extract_image_url(entry) -> str:
+    """
+    Tries to get a representative image from RSS entry.
+    Supports common feed fields and HTML summary fallbacks.
+    """
+    # media_content / media_thumbnail
+    media_content = getattr(entry, "media_content", None) or []
+    for m in media_content:
+        url = str((m or {}).get("url", "")).strip()
+        if url and url.startswith("http"):
+            return url
+
+    media_thumb = getattr(entry, "media_thumbnail", None) or []
+    for m in media_thumb:
+        url = str((m or {}).get("url", "")).strip()
+        if url and url.startswith("http"):
+            return url
+
+    # links: enclosure image/*
+    links = getattr(entry, "links", None) or []
+    for lnk in links:
+        rel = str((lnk or {}).get("rel", "")).lower()
+        ltype = str((lnk or {}).get("type", "")).lower()
+        href = str((lnk or {}).get("href", "")).strip()
+        if href and href.startswith("http") and (rel == "enclosure" or ltype.startswith("image/")):
+            return href
+
+    # generic image field
+    image_obj = getattr(entry, "image", None)
+    if isinstance(image_obj, dict):
+        href = str(image_obj.get("href", "")).strip()
+        if href and href.startswith("http"):
+            return href
+
+    # summary HTML <img src="...">
+    summary = str(getattr(entry, "summary", "") or "")
+    m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', summary, flags=re.IGNORECASE)
+    if m:
+        url = m.group(1).strip()
+        if url.startswith("http"):
+            return url
+
+    return ""
 
 
 def _keyword_hits(blob: str, keywords: set[str]) -> int:
@@ -233,6 +279,7 @@ def _fetch_news() -> list[NewsItem]:
                     summary=summary,
                     source=urlparse(src).netloc,
                     published_ts=published_ts,
+                    image_url=_extract_image_url(entry),
                 )
                 collected.append(item)
         except Exception as e:
@@ -402,7 +449,11 @@ async def _post_news_items(items: list[NewsItem], posted_links: set[str]) -> int
             continue
         text = _build_post_text(item)
         try:
-            await bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=text, disable_web_page_preview=False)
+            if item.image_url:
+                # Better visual presentation: photo card + caption (like channel-style news posts).
+                await bot.send_photo(chat_id=TELEGRAM_CHANNEL_ID, photo=item.image_url, caption=text)
+            else:
+                await bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=text, disable_web_page_preview=True)
             posted_links.add(normalized)
             sent += 1
             logger.info(f"News posted: {item.title[:90]}")
