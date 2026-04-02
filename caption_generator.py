@@ -39,6 +39,7 @@ MAX_HASHTAGS = 4
 ENABLE_AI_CAPTION = os.environ.get("ENABLE_AI_CAPTION", "false").lower() in ("1", "true", "yes", "on")
 AI_DRY_RUN = os.environ.get("AI_DRY_RUN", "false").lower() in ("1", "true", "yes", "on")
 ENABLE_AI_CTA = os.environ.get("ENABLE_AI_CTA", "true").lower() in ("1", "true", "yes", "on")
+UNIVERSAL_CTA = os.environ.get("UNIVERSAL_CTA", "💬 Как тебе этот пост?").strip()
 AI_PROVIDER = os.environ.get("AI_PROVIDER", "auto").strip().lower()
 AI_TIMEOUT_SEC = int(os.environ.get("AI_TIMEOUT_SEC", "12"))
 AI_BODY_MIN_CHARS = int(os.environ.get("AI_BODY_MIN_CHARS", "90"))
@@ -179,8 +180,8 @@ def _pick_caption_style():
 
 def _build_title_line(content_type):
     if content_type == "ai":
-        return "✨ AI визуал"
-    return "🧱 3D визуал"
+        return "💙 Свежий дроп"
+    return "❤️ Свежий дроп"
 
 
 def _pick_subject_tag(safe_tags):
@@ -248,7 +249,7 @@ def _assemble_caption(style, content_type, title_line, tech_block, body_text, st
     if hashtags:
         sections.append(hashtags)
 
-    cta_line = _generate_ai_cta(content_type, safe_tags) or random.choice(CTA_VARIANTS)
+    cta_line = UNIVERSAL_CTA or "💬 Как тебе этот пост?"
     sections.append(f"{cta_line}\n{footer}")
 
     # One empty line between blocks for cleaner, "bigger" visual rhythm.
