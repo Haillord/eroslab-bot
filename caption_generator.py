@@ -8,7 +8,9 @@ import math
 import os
 import random
 import time
+import json
 from datetime import datetime
+from pathlib import Path
 
 import requests
 
@@ -35,6 +37,8 @@ TECHNICAL_TAGS = {
 }
 
 MAX_HASHTAGS = 6
+CAPTION_STATE_FILE = os.environ.get("CAPTION_STATE_FILE", "caption_state.json")
+HASHTAG_HISTORY_SIZE = int(os.environ.get("HASHTAG_HISTORY_SIZE", "80"))
 
 ENABLE_AI_CAPTION = os.environ.get("ENABLE_AI_CAPTION", "false").lower() in ("1", "true", "yes", "on")
 AI_DRY_RUN = os.environ.get("AI_DRY_RUN", "false").lower() in ("1", "true", "yes", "on")
@@ -144,6 +148,60 @@ def _clean_caption_tags(tags):
         result.append(t)
         seen.add(t)
     return result
+
+
+def _load_caption_state():
+    path = Path(CAPTION_STATE_FILE)
+    if not path.exists():
+        return {"recent_hashtags": []}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {"recent_hashtags": []}
+        recent = data.get("recent_hashtags", [])
+        if not isinstance(recent, list):
+            recent = []
+        return {"recent_hashtags": [str(x).strip().lower() for x in recent if str(x).strip()]}
+    except Exception:
+        return {"recent_hashtags": []}
+
+
+def _save_caption_state(state):
+    payload = state if isinstance(state, dict) else {"recent_hashtags": []}
+    try:
+        with open(CAPTION_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save caption state: {e}")
+
+
+def _select_hashtags_with_diversity(safe_tags, max_count):
+    candidates = [str(t).strip().lower() for t in safe_tags if str(t).strip()]
+    unique = list(dict.fromkeys(candidates))
+    if not unique or max_count <= 0:
+        return []
+
+    state = _load_caption_state()
+    recent = list(state.get("recent_hashtags", []))
+
+    last_seen = {}
+    for idx, tag in enumerate(recent):
+        last_seen[tag] = idx
+
+    unseen = [t for t in unique if t not in last_seen]
+    seen = sorted(
+        [t for t in unique if t in last_seen],
+        key=lambda t: last_seen[t],  # older seen tags first
+    )
+
+    selected = (unseen + seen)[:max_count]
+
+    new_recent = recent + selected
+    if len(new_recent) > HASHTAG_HISTORY_SIZE:
+        new_recent = new_recent[-HASHTAG_HISTORY_SIZE:]
+    _save_caption_state({"recent_hashtags": new_recent})
+    return selected
 
 
 def _humanize_tag(tag):
@@ -481,7 +539,8 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
     tech_block = "\n".join(tech_lines) if tech_lines else ""
 
     safe_tags = _clean_caption_tags(_safe_tags(tags))
-    hashtags = " ".join(f"#{t}" for t in safe_tags[:MAX_HASHTAGS]) if safe_tags else ""
+    selected_hashtags = _select_hashtags_with_diversity(safe_tags, MAX_HASHTAGS)
+    hashtags = " ".join(f"#{t}" for t in selected_hashtags) if selected_hashtags else ""
     fallback_body = _build_fallback_body(content_type, likes, safe_tags)
     fallback_style_block = _build_style_block(fallback_body, content_type=content_type)
     fallback_body_text = "" if fallback_style_block else fallback_body
