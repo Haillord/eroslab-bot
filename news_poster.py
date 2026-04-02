@@ -573,6 +573,7 @@ def _build_post_text(item: NewsItem) -> str:
         f"✦ Платформы: {platforms}\n"
         f"✦ Локализация: {locale}\n"
         f"✦ Материал: {item.title[:120]}\n\n"
+        f"🔗 {item.link}\n"
         f"{WATERMARK_TEXT}"
     )
 
