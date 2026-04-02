@@ -61,6 +61,7 @@ NEWS_MIN_IMAGE_WIDTH = int(os.environ.get("NEWS_MIN_IMAGE_WIDTH", "700"))
 NEWS_MIN_IMAGE_HEIGHT = int(os.environ.get("NEWS_MIN_IMAGE_HEIGHT", "390"))
 NEWS_IMAGE_CHECK_TIMEOUT = int(os.environ.get("NEWS_IMAGE_CHECK_TIMEOUT", "8"))
 NEWS_MEDIA_MAX_IMAGES = int(os.environ.get("NEWS_MEDIA_MAX_IMAGES", "3"))
+NEWS_MAX_REDDIT_STREAK = int(os.environ.get("NEWS_MAX_REDDIT_STREAK", "1"))
 
 
 RELEVANCE_ERO_KEYWORDS = {
@@ -107,21 +108,24 @@ class NewsItem:
     published_ts: float
     image_url: str
     image_candidates: list[str]
+    source_kind: str
 
 
 def _load_state() -> dict:
     if not Path(NEWS_STATE_FILE).exists():
-        return {"posted_links": []}
+        return {"posted_links": [], "last_post_source_kind": "", "reddit_streak": 0}
     try:
         with open(NEWS_STATE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            return {"posted_links": []}
+            return {"posted_links": [], "last_post_source_kind": "", "reddit_streak": 0}
         data.setdefault("posted_links", [])
+        data.setdefault("last_post_source_kind", "")
+        data.setdefault("reddit_streak", 0)
         return data
     except Exception as e:
         logger.warning(f"Failed to load {NEWS_STATE_FILE}: {e}")
-        return {"posted_links": []}
+        return {"posted_links": [], "last_post_source_kind": "", "reddit_streak": 0}
 
 
 def _save_state(state: dict) -> None:
@@ -137,6 +141,27 @@ def _normalize_link(link: str) -> str:
     parsed = urlparse(str(link).strip())
     base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
     return base.rstrip("/")
+
+
+def _detect_source_kind(feed_url: str, item_link: str) -> str:
+    blob = f"{feed_url} {item_link}".lower()
+    if "store.steampowered.com/feeds/news/app/" in blob or "steamcommunity.com" in blob:
+        return "steam"
+    if "itch.io" in blob:
+        return "itch"
+    if "reddit.com" in blob:
+        return "reddit"
+    return "other"
+
+
+def _source_priority(kind: str) -> int:
+    if kind == "steam":
+        return 4
+    if kind == "itch":
+        return 3
+    if kind == "reddit":
+        return 2
+    return 1
 
 
 def _to_text(value: object) -> str:
@@ -321,6 +346,7 @@ def _fetch_news() -> list[NewsItem]:
                     published_ts=published_ts,
                     image_url=_extract_image_url(entry),
                     image_candidates=_extract_image_candidates(entry),
+                    source_kind=_detect_source_kind(src, link),
                 )
                 collected.append(item)
         except Exception as e:
@@ -328,12 +354,12 @@ def _fetch_news() -> list[NewsItem]:
 
     strict = [x for x in collected if _is_relevant(x)]
     if strict:
-        strict.sort(key=lambda x: x.published_ts, reverse=True)
+        strict.sort(key=lambda x: (_source_priority(x.source_kind), x.published_ts), reverse=True)
         logger.info(f"Relevant fresh news items: {len(strict)} (mode=strict)")
         return strict
 
     soft = [x for x in collected if _is_relevant_soft(x)]
-    soft.sort(key=lambda x: x.published_ts, reverse=True)
+    soft.sort(key=lambda x: (_source_priority(x.source_kind), x.published_ts), reverse=True)
     logger.info(f"Relevant fresh news items: {len(soft)} (mode=soft-fallback)")
     return soft
 
@@ -576,16 +602,21 @@ def _pick_best_image_urls(item: NewsItem, limit: int = 3) -> list[str]:
     return ordered
 
 
-async def _post_news_items(items: list[NewsItem], posted_links: set[str]) -> int:
+async def _post_news_items(items: list[NewsItem], posted_links: set[str], state: dict) -> int:
     if not TELEGRAM_BOT_TOKEN:
         logger.error("No TELEGRAM_BOT_TOKEN; abort.")
         return 0
 
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     sent = 0
+    reddit_streak = int(state.get("reddit_streak", 0))
+    last_kind = str(state.get("last_post_source_kind", ""))
     for item in items:
         normalized = _normalize_link(item.link)
         if normalized in posted_links:
+            continue
+        if item.source_kind == "reddit" and reddit_streak >= NEWS_MAX_REDDIT_STREAK:
+            logger.info(f"Skip reddit due to streak limit ({NEWS_MAX_REDDIT_STREAK}): {item.title[:90]}")
             continue
         text = _build_post_text(item)
         if len(text) > 1000:
@@ -611,10 +642,17 @@ async def _post_news_items(items: list[NewsItem], posted_links: set[str]) -> int
             posted_links.add(normalized)
             sent += 1
             logger.info(f"News posted: {item.title[:90]}")
+            last_kind = item.source_kind
+            if item.source_kind == "reddit":
+                reddit_streak += 1
+            else:
+                reddit_streak = 0
         except Exception as e:
             logger.warning(f"Failed to send news post: {e}")
         if sent >= NEWS_MAX_PER_RUN:
             break
+    state["last_post_source_kind"] = last_kind
+    state["reddit_streak"] = reddit_streak
     return sent
 
 
@@ -631,7 +669,7 @@ async def main() -> None:
     fresh_items = [x for x in all_items if _normalize_link(x.link) not in posted_links]
     logger.info(f"Fresh news items: {len(fresh_items)}")
 
-    sent_count = await _post_news_items(fresh_items, posted_links)
+    sent_count = await _post_news_items(fresh_items, posted_links, state)
     logger.info(f"Sent news posts: {sent_count}")
 
     state["posted_links"] = list(posted_links)

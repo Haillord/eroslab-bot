@@ -24,6 +24,24 @@ DEFAULT_NEWS_RSS_SOURCES = [
 ]
 
 
+def _build_steam_sources() -> list[str]:
+    """
+    Builds Steam news RSS feeds from STEAM_APP_IDS env.
+    Example: STEAM_APP_IDS="12345,67890"
+    """
+    raw = os.environ.get("STEAM_APP_IDS", "").strip()
+    if not raw:
+        return []
+
+    result = []
+    for part in raw.split(","):
+        appid = part.strip()
+        if not appid.isdigit():
+            continue
+        result.append(f"https://store.steampowered.com/feeds/news/app/{appid}/")
+    return result
+
+
 def get_news_sources() -> list[str]:
     """
     Returns deduplicated source list.
@@ -31,7 +49,7 @@ def get_news_sources() -> list[str]:
     """
     extra_raw = os.environ.get("NEWS_RSS_EXTRA", "").strip()
     extra = [x.strip() for x in extra_raw.split(",") if x.strip()]
-    merged = DEFAULT_NEWS_RSS_SOURCES + extra
+    merged = _build_steam_sources() + DEFAULT_NEWS_RSS_SOURCES + extra
 
     seen = set()
     result = []
