@@ -9,12 +9,18 @@ import os
 
 
 DEFAULT_NEWS_RSS_SOURCES = [
-    # General gaming + PC modding/news (we filter by keywords later).
+    # General gaming + PC modding/news (filtered heavily in poster logic).
     "https://www.pcgamer.com/rss/",
     "https://www.rockpapershotgun.com/feed",
     "https://www.dsogaming.com/feed/",
     # AI space (for "нейронки / tools / releases" bits).
     "https://www.marktechpost.com/feed/",
+    # More niche / community-oriented sources for adult-game chatter.
+    "https://www.reddit.com/r/lewdgames/new/.rss",
+    "https://www.reddit.com/r/nsfwgaming/new/.rss",
+    # Itch adult tags (often contains VN/sim project updates).
+    "https://itch.io/games/tag-adult.rss",
+    "https://itch.io/games/tag-visual-novel.rss",
 ]
 
 
@@ -34,4 +40,3 @@ def get_news_sources() -> list[str]:
             seen.add(src)
             result.append(src)
     return result
-

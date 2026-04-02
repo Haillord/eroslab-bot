@@ -187,6 +187,23 @@ def _is_relevant(item: NewsItem) -> bool:
     return False
 
 
+def _is_relevant_soft(item: NewsItem) -> bool:
+    """
+    Soft fallback when strict mode returned nothing.
+    Still erotica-first, but without mandatory release/update signal.
+    """
+    blob = f"{item.title} {item.summary}".lower()
+    if any(x in blob for x in EXCLUDE_KEYWORDS):
+        return False
+    if any(x in blob for x in POLICY_PAYMENT_EXCLUDE):
+        return False
+
+    ero_hits = _keyword_hits(blob, RELEVANCE_ERO_KEYWORDS)
+    game_hits = _keyword_hits(blob, RELEVANCE_GAME_KEYWORDS)
+    ai_hits = _keyword_hits(blob, RELEVANCE_AI_KEYWORDS)
+    return ero_hits >= 1 and (game_hits >= 1 or ai_hits >= 1)
+
+
 def _fetch_news() -> list[NewsItem]:
     lookback = (datetime.now(timezone.utc) - timedelta(hours=NEWS_LOOKBACK_HOURS)).timestamp()
     collected: list[NewsItem] = []
@@ -217,15 +234,20 @@ def _fetch_news() -> list[NewsItem]:
                     source=urlparse(src).netloc,
                     published_ts=published_ts,
                 )
-                if _is_relevant(item):
-                    collected.append(item)
+                collected.append(item)
         except Exception as e:
             logger.warning(f"Failed to parse feed {src}: {e}")
 
-    # Newest first.
-    collected.sort(key=lambda x: x.published_ts, reverse=True)
-    logger.info(f"Relevant fresh news items: {len(collected)}")
-    return collected
+    strict = [x for x in collected if _is_relevant(x)]
+    if strict:
+        strict.sort(key=lambda x: x.published_ts, reverse=True)
+        logger.info(f"Relevant fresh news items: {len(strict)} (mode=strict)")
+        return strict
+
+    soft = [x for x in collected if _is_relevant_soft(x)]
+    soft.sort(key=lambda x: x.published_ts, reverse=True)
+    logger.info(f"Relevant fresh news items: {len(soft)} (mode=soft-fallback)")
+    return soft
 
 
 def _available_ai_provider() -> str | None:
