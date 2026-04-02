@@ -340,8 +340,8 @@ def get_min_bitrate_kbps_for_height(height):
         return MIN_BITRATE_720P
     return MIN_BITRATE_480P
 
-def get_video_thumbnail(data: bytes) -> bytes:
-    """Извлекает первый кадр видео как JPEG bytes для vision."""
+def get_video_thumbnail(data: bytes, seek_sec: float = 2.0) -> bytes:
+    """Извлекает кадр видео как JPEG bytes для vision."""
     tmp_in = None
     tmp_out = None
     try:
@@ -350,10 +350,11 @@ def get_video_thumbnail(data: bytes) -> bytes:
             tmp_in = tmp.name
 
         tmp_out = tmp_in + "_thumb.jpg"
+        seek_value = max(0.0, float(seek_sec))
 
         cmd = [
             'ffmpeg', '-y', '-i', tmp_in,
-            '-ss', '2', '-vframes', '1',
+            '-ss', str(seek_value), '-vframes', '1',
             '-vf', 'scale=512:-1',
             '-q:v', '3',
             tmp_out
@@ -367,7 +368,7 @@ def get_video_thumbnail(data: bytes) -> bytes:
         with open(tmp_out, 'rb') as f:
             thumb_data = f.read()
 
-        logger.info(f"Thumbnail extracted: {len(thumb_data)} bytes")
+        logger.info(f"Thumbnail extracted at {seek_value:.1f}s: {len(thumb_data)} bytes")
         return thumb_data
 
     except Exception as e:
@@ -1438,12 +1439,19 @@ async def main():
 
     # ========== THUMBNAIL ДЛЯ ВИДЕО (для vision) ==========
     caption_image_data = data  # для фото — оригинал, для видео — fallback
+    caption_secondary_image_data = None
 
     if is_video:
-        thumbnail = get_video_thumbnail(data)
-        if thumbnail:
-            caption_image_data = thumbnail
-            logger.info(f"Using video thumbnail for vision caption ({len(thumbnail)} bytes)")
+        thumbnail_primary = get_video_thumbnail(data, seek_sec=2.0)
+        thumbnail_secondary = get_video_thumbnail(data, seek_sec=4.0)
+        if thumbnail_primary:
+            caption_image_data = thumbnail_primary
+            caption_secondary_image_data = thumbnail_secondary
+            logger.info(
+                "Using video thumbnails for vision caption "
+                f"(primary={len(thumbnail_primary)} bytes, "
+                f"secondary={len(thumbnail_secondary) if thumbnail_secondary else 0} bytes)"
+            )
         else:
             # Если thumbnail не получился, пробуем использовать первый фрагмент видео
             # как "изображение" (некоторые vision модели могут его обработать)
@@ -1507,6 +1515,7 @@ async def main():
         likes=caption_likes,
         image_data=caption_image_data,
         image_url=item["url"] if not is_video else None,
+        secondary_image_data=caption_secondary_image_data,
         watermark=WATERMARK_TEXT,
         suggestion="💬 Предложка: @Haillord",
         content_type=content_type,

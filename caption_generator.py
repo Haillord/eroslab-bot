@@ -450,15 +450,31 @@ def _build_image_data_url(image_data):
     return f"data:{mime};base64,{b64}"
 
 
-def _call_ai_vision(prompt, system_prompt, image_data=None, image_url=None, max_tokens=110, temperature=0.2, retries=1):
+def _call_ai_vision(
+    prompt,
+    system_prompt,
+    image_data=None,
+    image_url=None,
+    secondary_image_data=None,
+    secondary_image_url=None,
+    max_tokens=110,
+    temperature=0.2,
+    retries=1,
+):
     if not ENABLE_AI_VISION or not OPENROUTER_API_KEY:
         return None
 
-    resolved_image_url = image_url
-    if not resolved_image_url:
-        resolved_image_url = _build_image_data_url(image_data)
-    if not resolved_image_url:
+    primary_url = image_url or _build_image_data_url(image_data)
+    secondary_url = secondary_image_url or _build_image_data_url(secondary_image_data)
+
+    if not primary_url and not secondary_url:
         return None
+
+    content = [{"type": "text", "text": prompt}]
+    if primary_url:
+        content.append({"type": "image_url", "image_url": {"url": primary_url}})
+    if secondary_url:
+        content.append({"type": "image_url", "image_url": {"url": secondary_url}})
 
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
@@ -471,13 +487,7 @@ def _call_ai_vision(prompt, system_prompt, image_data=None, image_url=None, max_
         "max_tokens": max_tokens,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": resolved_image_url}},
-                ],
-            },
+            {"role": "user", "content": content},
         ],
     }
 
@@ -497,10 +507,17 @@ def _call_ai_vision(prompt, system_prompt, image_data=None, image_url=None, max_
     return None
 
 
-def _extract_visual_hint(content_type, image_data=None, image_url=None):
+def _extract_visual_hint(
+    content_type,
+    image_data=None,
+    image_url=None,
+    secondary_image_data=None,
+    secondary_image_url=None,
+):
     prompt = (
         "Опиши визуально что в кадре для подписи NSFW-поста: "
         "композиция, свет, настроение, динамика. "
+        "Если переданы два кадра, учитывай оба и опиши общий вайб. "
         "До 18 слов, без перечисления телесных деталей и без вульгарности."
     )
     system = (
@@ -512,6 +529,8 @@ def _extract_visual_hint(content_type, image_data=None, image_url=None):
         system,
         image_data=image_data,
         image_url=image_url,
+        secondary_image_data=secondary_image_data,
+        secondary_image_url=secondary_image_url,
         max_tokens=80,
         temperature=0.1,
         retries=1,
@@ -521,11 +540,27 @@ def _extract_visual_hint(content_type, image_data=None, image_url=None):
     return hint.replace("\n", " ").strip()
 
 
-def _generate_ai_body(content_type, rating, likes, safe_tags, tech_block, image_data=None, image_url=None):
+def _generate_ai_body(
+    content_type,
+    rating,
+    likes,
+    safe_tags,
+    tech_block,
+    image_data=None,
+    image_url=None,
+    secondary_image_data=None,
+    secondary_image_url=None,
+):
     if not ENABLE_AI_CAPTION:
         return None
 
-    visual_hint = _extract_visual_hint(content_type, image_data=image_data, image_url=image_url)
+    visual_hint = _extract_visual_hint(
+        content_type,
+        image_data=image_data,
+        image_url=image_url,
+        secondary_image_data=secondary_image_data,
+        secondary_image_url=secondary_image_url,
+    )
 
     base_prompt = (
         "Сделай короткий пост на русском для NSFW Telegram канала.\n"
@@ -605,6 +640,7 @@ def _generate_ai_body(content_type, rating, likes, safe_tags, tech_block, image_
 # ==================== BUILD ====================
 
 def generate_caption(tags, rating, likes, image_data=None, image_url=None,
+                     secondary_image_data=None, secondary_image_url=None,
                      watermark="📣 @eroslabai", suggestion="💬 Предложка: @Haillord",
                      content_type="ai", width=None, height=None,
                      file_size=None, date=None):
@@ -668,6 +704,8 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
         tech_block,
         image_data=image_data,
         image_url=image_url,
+        secondary_image_data=secondary_image_data,
+        secondary_image_url=secondary_image_url,
     )
     if not ai_body:
         return fallback_caption
