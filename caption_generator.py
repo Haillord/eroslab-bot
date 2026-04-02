@@ -547,6 +547,9 @@ def _extract_visual_hint(
         logger.info("Vision hint unavailable: empty response from vision model")
         return None
     normalized = hint.replace("\n", " ").strip()
+    if normalized.lower() in {"none", "null", "n/a", "na", "no", "nope", "-"}:
+        logger.info("Vision hint unavailable: non-informative token from vision model")
+        return None
     logger.info(f"Vision hint used: {normalized[:80]}")
     return normalized
 
