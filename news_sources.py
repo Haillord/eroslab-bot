@@ -9,18 +9,39 @@ import os
 
 
 DEFAULT_NEWS_RSS_SOURCES = [
-    # General gaming + PC modding/news (filtered heavily in poster logic).
+    # Core gaming + PC modding/news (filtered heavily in poster logic).
     "https://www.pcgamer.com/rss/",
     "https://www.rockpapershotgun.com/feed",
     "https://www.dsogaming.com/feed/",
+    "https://www.pcgamesn.com/feed",
+    "https://www.vg247.com/feed/",
+    "https://www.gematsu.com/feed",
+    "https://www.destructoid.com/feed/",
+    "https://www.dualshockers.com/feed/",
+    "https://www.nichegamer.com/feed/",
+    "https://www.polygon.com/rss/index.xml",
+    "https://kotaku.com/rss",
     # AI space (for "нейронки / tools / releases" bits).
     "https://www.marktechpost.com/feed/",
+    "https://the-decoder.com/feed/",
+    "https://www.technologyreview.com/topic/artificial-intelligence/feed/",
     # More niche / community-oriented sources for adult-game chatter.
     "https://www.reddit.com/r/lewdgames/new/.rss",
     "https://www.reddit.com/r/nsfwgaming/new/.rss",
+    "https://www.reddit.com/r/visualnovels/new/.rss",
+    "https://www.reddit.com/r/itchio/new/.rss",
+    "https://www.reddit.com/r/Steam/new/.rss",
+    # Communities that sometimes post adult VN/mod updates.
+    "https://www.reddit.com/r/adultgames/new/.rss",
+    "https://www.reddit.com/r/gamemods/new/.rss",
     # Itch adult tags (often contains VN/sim project updates).
     "https://itch.io/games/tag-adult.rss",
     "https://itch.io/games/tag-visual-novel.rss",
+    "https://itch.io/games/tag-erotic.rss",
+    "https://itch.io/games/tag-nsfw.rss",
+    # Additional candidate feeds (some may be sparse, parser handles that).
+    "https://f95zone.to/forums/games.2/index.rss",
+    "https://f95zone.to/forums/game-updates.8/index.rss",
 ]
 
 
