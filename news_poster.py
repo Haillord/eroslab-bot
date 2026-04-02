@@ -82,6 +82,20 @@ RELEVANCE_ERO_KEYWORDS = {
     "r18", "r-18", "ero", "adult mod", "nsfw mod", "romance",
 }
 
+RELEVANCE_GLOBAL_NSFW_KEYWORDS = {
+    # Core adult / porn
+    "nsfw", "adult", "18+", "17+", "r18", "r-18", "porn", "xxx", "erotic", "erotica",
+    "sex", "sexual", "hentai", "ecchi", "lewd", "bdsm", "fetish", "camgirl", "cams",
+    "onlyfans", "fansly", "adult performer", "pornstar", "nude", "nudes", "uncensored",
+    # Adult content verticals
+    "vr porn", "ai porn", "deepfake", "doujin", "ero", "eroge", "adult game",
+    "sex game", "porn game", "visual novel", "dating sim", "adult mod", "nsfw mod",
+}
+
+HARD_BLOCK_ILLEGAL_KEYWORDS = {
+    "loli", "shota", "minor", "underage", "child", "cp", "teenage",
+}
+
 RELEVANCE_GAME_KEYWORDS = {
     "steam", "itch.io", "patreon", "dlsite", "mod", "modding", "workshop",
     "release", "demo", "wishlist", "patch", "update", "build", "game",
@@ -375,6 +389,20 @@ def _is_relevant_soft(item: NewsItem) -> bool:
     return False
 
 
+def _is_relevant_nsfw_only(item: NewsItem) -> bool:
+    """
+    Very loose mode for review inbox:
+    any erotica/nsfw signal passes (except hard excluded policy topics).
+    """
+    blob = f"{item.title} {item.summary}".lower()
+    if any(x in blob for x in EXCLUDE_KEYWORDS):
+        return False
+    if any(x in blob for x in HARD_BLOCK_ILLEGAL_KEYWORDS):
+        return False
+    global_hits = _keyword_hits(blob, RELEVANCE_GLOBAL_NSFW_KEYWORDS)
+    return global_hits >= 1
+
+
 def _fetch_news() -> list[NewsItem]:
     lookback = (datetime.now(timezone.utc) - timedelta(hours=NEWS_LOOKBACK_HOURS)).timestamp()
     collected: list[NewsItem] = []
@@ -425,6 +453,9 @@ def _fetch_news() -> list[NewsItem]:
     if NEWS_FILTER_MODE == "strict":
         selected = strict
         selected_mode = "strict"
+    elif NEWS_FILTER_MODE == "nsfw_only":
+        selected = [x for x in collected if _is_relevant_nsfw_only(x)]
+        selected_mode = "nsfw_only"
     elif NEWS_FILTER_MODE == "thematic":
         # Prefer broader thematic flow, fallback to strict if needed.
         selected = soft if soft else strict
@@ -931,6 +962,7 @@ async def main() -> None:
         candidate = None
         candidate_payload = None
         for item in fresh_items:
+            # In review mode we should not over-filter candidate drafts.
             if item.source_kind == "reddit" and reddit_streak >= NEWS_MAX_REDDIT_STREAK:
                 continue
             # In review mode allow text-only draft when image quality filter is too strict.
@@ -940,6 +972,16 @@ async def main() -> None:
             candidate = item
             candidate_payload = payload
             break
+
+        # Fallback: if streak rule removed all candidates, try again without streak restriction.
+        if not candidate:
+            for item in fresh_items:
+                payload = _build_payload_for_item(item, allow_no_image=True)
+                if payload is None:
+                    continue
+                candidate = item
+                candidate_payload = payload
+                break
 
         if not candidate or not candidate_payload:
             logger.info("No suitable item for review draft")
