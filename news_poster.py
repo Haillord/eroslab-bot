@@ -385,16 +385,14 @@ def _is_relevant(item: NewsItem) -> bool:
     release_hits = _keyword_hits(blob, RELEASE_SIGNAL_KEYWORDS)
     title_release_hits = _keyword_hits(title_blob, RELEASE_SIGNAL_KEYWORDS)
 
-    # Strict by default: keep only erotica-related news with gaming/AI context.
-    # This prevents random generic gaming posts from slipping in.
-    if title_ero_hits == 0 and ero_hits < 2:
+    # Оптимальный режим: достаточно 1 эро ключа в любом месте
+    if ero_hits < 1:
         return False
-    # For this channel we prefer practical news (release/update/mod/demo).
-    if release_hits == 0 and title_release_hits == 0:
-        return False
+    # Если есть контекст игр или ИИ — сразу пропускаем
     if ero_hits >= 1 and (game_hits >= 1 or ai_hits >= 1):
         return True
-    if ero_hits >= 2:
+    # Если просто хороший новость про эротику — тоже пропускаем
+    if ero_hits >= 1 and release_hits >= 1:
         return True
     return False
 
