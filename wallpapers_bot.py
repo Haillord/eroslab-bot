@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 from PIL import Image
 import telegram
 from telegram import Bot
-from caption_generator import generate_caption
+from caption_generator import generate_wallpaper_caption
 from watermark import should_add_watermark
 
 
@@ -35,8 +35,8 @@ CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 WATERMARK_ENABLED = False
 MIN_LIKES        = 25
 MIN_IMAGE_SIZE   = 720
-MIN_ASPECT_RATIO_MIN = 0.5  # 9:16 вертикальные
-MIN_ASPECT_RATIO_MAX = 2.0  # 16:9 горизонтальные
+MIN_ASPECT_RATIO_MIN = 0.5   # 9:16 вертикальные (телефон)
+MIN_ASPECT_RATIO_MAX = 2.0   # 16:9 горизонтальные (монитор)
 IMAGE_PACK_SIZE = 4
 IMAGE_PACK_CANDIDATE_POOL = 24
 
@@ -160,22 +160,44 @@ def has_blacklisted(tags):
     blacklisted = set(normalized_tags) & BLACKLIST_TAGS
     return bool(blacklisted)
 
-def check_media_size(data, url):
+def get_preferred_orientation() -> str:
+    """Возвращает предпочтительную ориентацию и переключает на следующую."""
+    last_type = content_state.get("last_type", "landscape")
+    preferred = "portrait" if last_type == "landscape" else "landscape"
+    content_state["last_type"] = preferred
+    logger.info(f"Orientation: last={last_type}, preferred={preferred}")
+    return preferred
+
+def check_media_size(data, url, preferred_orientation: str = None):
     try:
         if not url.lower().endswith((".mp4", ".webm", ".gif")):
             img = Image.open(BytesIO(data))
             width, height = img.size
             aspect = width / height
 
-            if max(width, height) >= MIN_IMAGE_SIZE and MIN_ASPECT_RATIO_MIN <= aspect <= MIN_ASPECT_RATIO_MAX:
-                return True
-            else:
-                logger.warning(f"Image not suitable: {width}x{height} ratio={aspect:.2f}")
+            if max(width, height) < MIN_IMAGE_SIZE:
+                logger.warning(f"Image too small: {width}x{height}")
                 return False
+
+            if not (MIN_ASPECT_RATIO_MIN <= aspect <= MIN_ASPECT_RATIO_MAX):
+                logger.warning(f"Bad aspect ratio: {width}x{height} ratio={aspect:.2f}")
+                return False
+
+            if preferred_orientation:
+                is_portrait = aspect < 1.0
+                if preferred_orientation == "portrait" and not is_portrait:
+                    logger.info(f"Preferred portrait but got landscape {width}x{height}, still accepted")
+                elif preferred_orientation == "landscape" and is_portrait:
+                    logger.info(f"Preferred landscape but got portrait {width}x{height}, still accepted")
+
+            return True
         return False
     except Exception as e:
         logger.error(f"Error checking media size: {e}")
         return False
+
+def compute_image_hash(data: bytes) -> str:
+    return hashlib.md5(data).hexdigest()
 
 
 # ==================== RETRY ДЛЯ TELEGRAM ====================
@@ -341,9 +363,20 @@ def _is_safe_rating(nsfw_level):
 
 def fetch_civitai(max_pages: int = 5):
     variations = [
+        # Приоритет: конкретные теги для обоев
+        {"browsingLevel": 1, "sort": "Most Reactions", "period": "Week",  "tags": "wallpaper"},
+        {"browsingLevel": 1, "sort": "Most Reactions", "period": "Month", "tags": "wallpaper"},
+        {"browsingLevel": 1, "sort": "Most Reactions", "period": "Week",  "tags": "landscape"},
+        {"browsingLevel": 1, "sort": "Most Reactions", "period": "Week",  "tags": "scenery"},
+        {"browsingLevel": 1, "sort": "Most Reactions", "period": "Week",  "tags": "fantasy landscape"},
+        {"browsingLevel": 1, "sort": "Most Reactions", "period": "Week",  "tags": "environment"},
+        # Общие без тегов
         {"browsingLevel": 1, "sort": "Most Reactions", "period": "Week"},
         {"browsingLevel": 1, "sort": "Most Reactions", "period": "Month"},
-        {"browsingLevel": 1, "sort": "Newest", "period": "Week"},
+        {"browsingLevel": 1, "sort": "Newest",         "period": "Week"},
+        # Фолбэк AllTime
+        {"browsingLevel": 1, "sort": "Most Reactions", "period": "AllTime", "tags": "wallpaper"},
+        {"browsingLevel": 1, "sort": "Most Reactions", "period": "AllTime"},
     ]
 
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
@@ -352,24 +385,29 @@ def fetch_civitai(max_pages: int = 5):
         all_items = []
         seen_ids = set()
         next_page_url = None
-        
+
+        tag_label = base_params.get("tags", "no-tag")
+        period_label = base_params.get("period", "")
+        logger.info(f"Trying variation: tag={tag_label} period={period_label}")
+
         for page in range(1, max_pages + 1):
             request_url = next_page_url or "https://civitai.com/api/v1/images"
             params = None if next_page_url else {**base_params, "limit": 100}
-            
+
             try:
                 r = _request_with_backoff(request_url, params=params, headers=headers)
                 if r is None:
                     continue
 
                 if r.status_code == 400:
-                    continue
+                    logger.warning(f"400 Bad Request for params: {base_params}")
+                    break
 
                 data = r.json()
                 items = data.get("items", [])
-                
+
                 if not items:
-                    continue
+                    break
 
                 for item in items:
                     item_id = item.get("id")
@@ -377,7 +415,7 @@ def fetch_civitai(max_pages: int = 5):
                         continue
                     seen_ids.add(item_id)
                     all_items.append(item)
-                logger.info(f"CivitAI page {page}: got {len(items)} items")
+                logger.info(f"CivitAI page {page}: got {len(items)} items (total: {len(all_items)})")
 
                 metadata = data.get("metadata", {}) if isinstance(data, dict) else {}
                 next_page_url = metadata.get("nextPage")
@@ -398,7 +436,7 @@ def fetch_civitai(max_pages: int = 5):
         skipped_rating = 0
         skipped_blacklist = 0
         skipped_likes = 0
-        
+
         for item in all_items:
             try:
                 nsfw_level = item.get("nsfwLevel")
@@ -420,47 +458,39 @@ def fetch_civitai(max_pages: int = 5):
                     continue
 
                 good_items.append({
-                    "id":      f"civitai_{item['id']}",
-                    "url":     item.get("url", ""),
-                    "tags":    tags[:15],
-                    "likes":   likes,
-                    "rating":  nsfw_level,
-                    "post_id": item.get("postId"),
-                    "mime":    (item.get("mimeType") or "").lower(),
+                    "id":        f"civitai_{item['id']}",
+                    "url":       item.get("url", ""),
+                    "tags":      tags[:15],
+                    "likes":     likes,
+                    "rating":    nsfw_level,
+                    "post_id":   item.get("postId"),
+                    "mime":      (item.get("mimeType") or "").lower(),
                     "createdAt": item.get("createdAt"),
-                    "source":  "civitai",
+                    "source":    "civitai",
+                    "tag_source": tag_label,
                 })
 
             except Exception as e:
                 logger.error(f"Error processing item {item.get('id')}: {e}")
                 continue
 
-        if good_items:
-            logger.info(f"Found {len(good_items)} good wallpapers")
-            return good_items
+        logger.info(
+            f"Variation tag={tag_label}: good={len(good_items)} "
+            f"skip_rating={skipped_rating} skip_bl={skipped_blacklist} skip_likes={skipped_likes}"
+        )
 
-        logger.info(f"No suitable posts: skipped_rating={skipped_rating}, skipped_blacklist={skipped_blacklist}, skipped_likes={skipped_likes}")
+        if good_items:
+            return good_items
 
     return []
 
 
-def weighted_choice(items):
-    if not items:
-        return None
-
-    weights = [max(1, item["likes"]) for item in items]
-    selected = random.choices(items, weights=weights, k=1)[0]
-
-    logger.info(f"Selected: {selected['id']} (likes:{selected['likes']})")
-
-    return selected
-
-
 def fetch_and_pick():
+    preferred_orientation = get_preferred_orientation()
     items = fetch_civitai()
 
     if not items:
-        logger.warning("No items found")
+        logger.warning("No items found from CivitAI")
         return None
 
     fresh = [i for i in items if i["id"] not in posted_ids]
@@ -472,26 +502,54 @@ def fetch_and_pick():
         return None
 
     fresh_photos = [i for i in fresh if not i["mime"].startswith("video/")]
-    
+
     if not fresh_photos:
         logger.info("No suitable photos found")
         return None
 
-    # Идём по порядку от самой лучшей к худшей пока не найдём подходящую
-    for candidate in sorted(fresh_photos, key=lambda x: x["likes"], reverse=True):
-        try:
-            r = requests.get(candidate.get("url"), timeout=15)
-            r.raise_for_status()
-            
-            if check_media_size(r.content, candidate.get("url")):
-                logger.info(f"Found suitable wallpaper: {candidate['id']} (likes:{candidate['likes']})")
-                return candidate
-        except Exception as e:
-            logger.warning(f"Skip candidate {candidate['id']}: {e}")
-            continue
-    
-    logger.info("No suitable wallpapers found after checking all candidates")
-    return None
+    def _try_pick(candidates, strict_orientation: str = None):
+        for candidate in sorted(candidates, key=lambda x: x["likes"], reverse=True):
+            try:
+                r = requests.get(candidate.get("url"), timeout=15)
+                r.raise_for_status()
+                image_data = r.content
+
+                img_hash = compute_image_hash(image_data)
+                if img_hash in posted_hashes:
+                    logger.info(f"Skip duplicate hash: {candidate['id']}")
+                    continue
+
+                if not check_media_size(image_data, candidate.get("url"), strict_orientation):
+                    continue
+
+                if strict_orientation:
+                    img = Image.open(BytesIO(image_data))
+                    w, h = img.size
+                    aspect = w / h
+                    is_portrait = aspect < 1.0
+                    if strict_orientation == "portrait" and not is_portrait:
+                        continue
+                    if strict_orientation == "landscape" and is_portrait:
+                        continue
+
+                logger.info(f"Found: {candidate['id']} (likes:{candidate['likes']}, tag:{candidate.get('tag_source')})")
+                return candidate, img_hash
+
+            except Exception as e:
+                logger.warning(f"Skip candidate {candidate['id']}: {e}")
+                continue
+        return None, None
+
+    result, img_hash = _try_pick(fresh_photos, strict_orientation=preferred_orientation)
+
+    if result is None:
+        logger.info(f"No {preferred_orientation} found, trying any orientation")
+        result, img_hash = _try_pick(fresh_photos, strict_orientation=None)
+
+    if result:
+        result["_img_hash"] = img_hash
+
+    return result
 
 
 # ==================== ПУБЛИКАЦИЯ ====================
@@ -500,8 +558,13 @@ async def publish_item_to_channel(bot: Bot, item: dict):
         r = requests.get(item.get("url"), timeout=60)
         r.raise_for_status()
         image_data = r.content
-        
+
         if not check_media_size(image_data, item.get("url")):
+            return False
+
+        img_hash = item.get("_img_hash") or compute_image_hash(image_data)
+        if img_hash in posted_hashes:
+            logger.warning(f"Duplicate hash at publish stage, skip: {item['id']}")
             return False
 
         image_data = _fit_photo_size_for_telegram(image_data)
@@ -509,18 +572,15 @@ async def publish_item_to_channel(bot: Bot, item: dict):
         photo_io.name = "wallpaper.jpg"
 
         width, height = Image.open(BytesIO(image_data)).size
-        
-        caption = generate_caption(
+
+        caption = generate_wallpaper_caption(
             tags=item.get("tags", []),
-            rating="safe",
             likes=item.get("likes", 0),
-            image_url=item.get("url"),
-            watermark="📣 @eroslabwallpaper",
-            suggestion="💬 Предложи обои: @Haillord",
-            content_type="ai",
             width=width,
             height=height,
             date=item.get("createdAt"),
+            suggestion="💬 Предложи обои: @Haillord",
+            watermark="📢 @eroslabwallpaper",
         )
 
         await send_with_retry(
@@ -532,8 +592,9 @@ async def publish_item_to_channel(bot: Bot, item: dict):
             write_timeout=60,
             read_timeout=60,
         )
-        
+
         posted_ids.add(item["id"])
+        posted_hashes.add(img_hash)
         return True
 
     except Exception as e:
@@ -568,9 +629,9 @@ async def main():
         return
 
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    
+
     selected = fetch_and_pick()
-    
+
     if not selected:
         run_metrics["skip_no_item"] = 1
         logger.info("No suitable wallpaper found this run")
@@ -579,7 +640,7 @@ async def main():
         return
 
     success = await publish_item_to_channel(bot, selected)
-    
+
     if success:
         run_metrics["posted"] = 1
         logger.info(f"Successfully posted wallpaper {selected['id']}")
@@ -588,7 +649,7 @@ async def main():
 
     flush_stats_once()
     save_all()
-    
+
     try:
         await bot.close()
     except Exception:

@@ -120,6 +120,155 @@ VISION_MODELS = [
     "meta-llama/llama-3.2-11b-vision-instruct:free",
 ]
 
+# ==================== WALLPAPER CAPTION ====================
+
+WALLPAPER_TITLES = (
+    "✦ WALLPAPER OF THE DAY ✦",
+    "✦ AI WALLPAPER ✦",
+    "✦ WALLPAPER DROP ✦",
+    "✦ DAILY WALLPAPER ✦",
+    "✦ FRESH WALLPAPER ✦",
+    "✦ NEW WALLPAPER ✦",
+)
+
+# Эмодзи по тематике тегов
+WALLPAPER_TAG_EMOJI = {
+    "landscape":   "🌄",
+    "nature":      "🌿",
+    "forest":      "🌲",
+    "mountain":    "🏔",
+    "ocean":       "🌊",
+    "sea":         "🌊",
+    "sky":         "🌌",
+    "space":       "🚀",
+    "city":        "🌆",
+    "night":       "🌙",
+    "sunset":      "🌅",
+    "fantasy":     "🔮",
+    "cyberpunk":   "⚡",
+    "anime":       "🎌",
+    "abstract":    "🎨",
+    "dark":        "🖤",
+    "winter":      "❄️",
+    "snow":        "❄️",
+    "fire":        "🔥",
+    "dragon":      "🐉",
+    "flower":      "🌸",
+    "rain":        "🌧",
+    "fog":         "🌫",
+    "desert":      "🏜",
+    "waterfall":   "💧",
+    "castle":      "🏰",
+    "robot":       "🤖",
+    "magic":       "✨",
+}
+
+
+def _pick_wallpaper_emoji(tags: list) -> str:
+    """Подбирает эмодзи под тематику тегов."""
+    for tag in tags:
+        key = str(tag).lower().replace(" ", "_")
+        if key in WALLPAPER_TAG_EMOJI:
+            return WALLPAPER_TAG_EMOJI[key]
+        # Частичное совпадение
+        for k, emoji in WALLPAPER_TAG_EMOJI.items():
+            if k in key or key in k:
+                return emoji
+    return "🖼"
+
+
+def generate_wallpaper_caption(
+    tags,
+    likes=0,
+    width=None,
+    height=None,
+    date=None,
+    suggestion="💬 Предложи обои: @Haillord",
+    watermark="📢 @eroslabwallpaper",
+):
+    """
+    Генерирует подпись для канала с обоями.
+
+    Формат:
+        ✦ WALLPAPER OF THE DAY ✦
+
+        <blockquote>
+        🌄 fantasy • landscape • mountain
+
+        📐 1920 × 1080 · 16:9
+        ❤️ 342 реакции
+        </blockquote>
+
+        💬 Предложи обои: @Haillord · 📢 @eroslabwallpaper
+    """
+
+    # Заголовок
+    title = random.choice(WALLPAPER_TITLES)
+
+    # Теги: очищаем и берём до 5 штук для читаемости
+    safe_tags = _clean_caption_tags(_safe_tags(tags))
+    selected_tags = _select_hashtags_with_diversity(safe_tags, 5)
+
+    # Строка тегов вида: fantasy • landscape • mountain
+    tag_emoji = _pick_wallpaper_emoji(selected_tags or safe_tags)
+    tags_line = (
+        f"{tag_emoji} {' • '.join(selected_tags)}"
+        if selected_tags else ""
+    )
+
+    # Строка хештегов
+    all_hashtags = _select_hashtags_with_diversity(safe_tags, MAX_HASHTAGS)
+    hashtags_line = " ".join(f"#{t}" for t in all_hashtags) if all_hashtags else ""
+
+    # Разрешение и соотношение сторон
+    resolution, aspect_ratio = _format_resolution(width, height)
+    res_line = ""
+    if resolution:
+        res_line = f"📐 {resolution}"
+        if aspect_ratio:
+            res_line += f" · {aspect_ratio}"
+
+    # Лайки / реакции
+    likes_line = ""
+    if likes and likes > 0:
+        likes_line = f"❤️ {likes:,} реакций"
+
+    # Собираем содержимое blockquote
+    bq_parts = []
+    if tags_line:
+        bq_parts.append(tags_line)
+    if res_line or likes_line:
+        # Пустая строка между тегами и техническими данными
+        if tags_line:
+            bq_parts.append("")
+        if res_line:
+            bq_parts.append(res_line)
+        if likes_line:
+            bq_parts.append(likes_line)
+    if hashtags_line:
+        bq_parts.append("")
+        bq_parts.append(hashtags_line)
+
+    blockquote = (
+        f"<blockquote>{chr(10).join(bq_parts)}</blockquote>"
+        if bq_parts else ""
+    )
+
+    # Футер
+    safe_watermark = _escape_html(watermark)
+    clickable = '<a href="https://t.me/Haillord">💬 Предложи обои</a>'
+    footer = f"{clickable} · {safe_watermark}"
+
+    # Собираем итоговый пост
+    parts = [title]
+    if blockquote:
+        parts.append(blockquote)
+    parts.append(footer)
+
+    return "\n\n".join(parts)
+
+
+# ==================== ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений) ====================
 
 def _generate_ai_cta(content_type, safe_tags):
     if not ENABLE_AI_CTA:
@@ -486,7 +635,6 @@ def _call_ai_vision(
     if not primary_url:
         return None
 
-    # Ресайз если нужно (OpenRouter рекомендует до 1024px)
     if image_data:
         try:
             from io import BytesIO
@@ -506,7 +654,6 @@ def _call_ai_vision(
         except Exception:
             pass
 
-    # Сообщение с картинкой — собираем один раз, не перезаписываем в цикле
     user_content = [
         {"type": "text", "text": prompt},
         {"type": "image_url", "image_url": {"url": primary_url}},
