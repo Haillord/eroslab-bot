@@ -25,34 +25,59 @@
 
 ### ⚡️ Killer Features
 
-*   **Serverless Architecture** — Работает 24/7 на GitHub Actions. Ноль затрат на сервер.
-*   **Gist DB Storage** — Состояние и история хранятся в скрытых Gists. **Никаких лишних коммитов** в историю репозитория.
-*   **Smart Filtering** — Защита от дублей по хешу медиа, проверка разрешения и качества.
-*   **AI Engine** — Автоматическая генерация подписей через Groq/OpenRouter (Vision).
-*   **Media Processing** — Наложение водяных знаков и перекодирование видео через FFmpeg на лету.
+*   **Serverless 24/7** — Полная автоматизация на GitHub Actions без затрат на сервер.
+*   **Gist Database** — Хранение состояния в скрытых Gists: **никаких лишних коммитов** в истории.
+*   **Smart Filtering** — Защита от дублей по хешу, автоматический контроль качества и разрешения.
+*   **AI Engine** — Генерация контекстных подписей через Groq и OpenRouter (Llama 3 / Vision).
+*   **Media Lab** — Наложение водяных знаков и оптимизация видео через FFmpeg на лету.
 
 ---
 
 ### 🛠 Stack & Integration
 
-| Component | Technology |
+| Компонент | Технологии |
 | :--- | :--- |
-| **Engine** | Python 3.11 + `python-telegram-bot` |
-| **Runtime** | GitHub Actions (Workflow Dispatch / Schedule) |
-| **Database** | GitHub Gist API (No-SQL style) |
-| **Content** | CivitAI, Rule34, Wallhaven |
-| **AI/ML** | Groq (Llama 3), OpenRouter |
-| **Media** | FFmpeg, yt-dlp |
+| **Engine** | Python 3.11 • `python-telegram-bot` |
+| **Automation** | GitHub Actions Workflow |
+| **Database** | GitHub Gist API |
+| **Content** | CivitAI • Rule34 • Wallhaven |
+| **AI Processing** | Groq • OpenRouter |
+| **Media** | FFmpeg • yt-dlp |
 
 ---
 
-### 📂 Project Logic
+### 📂 Structure
 
 ```text
-📜 civitai_bot.py      # Core Engine (NSFW/Main)
-📜 wallpapers_bot.py   # SFW Engine (Wallpapers)
-📜 gist_storage.py     # State & Hash Management
-📜 caption_gen.py      # AI Captioning Logic
-📜 watermark.py        # Image/Video Processing
-└─ .github/workflows/  # Deployment & Scheduling
-⚙️ Quick ConfigurationДобавьте следующие переменные в Settings > Secrets and variables > Actions:SecretRoleTELEGRAM_BOT_TOKENТокен бота для контента 18+TELEGRAM_BOT_TOKEN_WALLPAPERSТокен бота для SFW обоевGH_TOKENClassic Token с доступом к GistGIST_IDID вашего секретного GistCIVITAI_API_KEYДоступ к API CivitAIGROQ_API_KEYКлюч для работы AI-подписей👨‍💻 Developed byHaillord — Telegram<p align="right"><img src="https://www.google.com/search?q=https://img.shields.io/badge/Made%2520with-Python-3776AB%3Fstyle%3Dflat-square%26logo%3Dpython" alt="python"><img src="https://www.google.com/search?q=https://img.shields.io/badge/Powered%2520by-GitHub%2520Actions-2088FF%3Fstyle%3Dflat-square%26logo%3Dgithub-actions" alt="actions"></p>
+📜 civitai_bot.py      # Основной движок (NSFW)
+📜 wallpapers_bot.py   # Бот с обоями (SFW)
+📜 gist_storage.py     # Логика работы с БД Gist
+📜 caption_gen.py      # AI-генератор описаний
+📜 watermark.py        # Обработка фото и видео
+```
+
+---
+
+### 🔑 Configuration (Secrets)
+
+Настройте эти переменные в репозитории:
+`Settings` → `Secrets and variables` → `Actions`
+
+| Secret | Описание |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Токен основного бота |
+| `GH_TOKEN` | Classic Token с правами на Gist |
+| `GIST_ID` | ID вашего секретного Gist |
+| `CIVITAI_API_KEY` | Доступ к API CivitAI |
+| `GROQ_API_KEY` | Ключ для AI генерации подписей |
+
+---
+
+<p align="right">
+  <img src="https://img.shields.io/badge/Made%20with-Python-3776AB?style=flat-square&logo=python" alt="python">
+  <img src="https://img.shields.io/badge/Powered%20by-GitHub%20Actions-2088FF?style=flat-square&logo=github-actions" alt="actions">
+</p>
+
+<p align="center">
+  <sub>Developed by <b>Haillord</b></sub>
+</p>
