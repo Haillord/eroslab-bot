@@ -35,7 +35,8 @@ CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 WATERMARK_ENABLED = False
 MIN_LIKES        = 25
 MIN_IMAGE_SIZE   = 1080
-MIN_ASPECT_RATIO = 1.5  # Только горизонтальные обои 16:9 и выше
+MIN_ASPECT_RATIO_MIN = 0.5  # 9:16 вертикальные
+MIN_ASPECT_RATIO_MAX = 2.0  # 16:9 горизонтальные
 IMAGE_PACK_SIZE = 4
 IMAGE_PACK_CANDIDATE_POOL = 24
 
@@ -166,7 +167,7 @@ def check_media_size(data, url):
             width, height = img.size
             aspect = width / height
             
-            if width >= MIN_IMAGE_SIZE and height >= MIN_IMAGE_SIZE * 0.7 and aspect >= MIN_ASPECT_RATIO:
+            if width >= MIN_IMAGE_SIZE and height >= MIN_IMAGE_SIZE * 0.7 and MIN_ASPECT_RATIO_MIN <= aspect <= MIN_ASPECT_RATIO_MAX:
                 return True
             else:
                 logger.warning(f"Image not suitable: {width}x{height} ratio={aspect:.2f}")
@@ -571,7 +572,10 @@ async def main():
     flush_stats_once()
     save_all()
     
-    await bot.close()
+    try:
+        await bot.close()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
