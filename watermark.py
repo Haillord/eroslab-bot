@@ -90,18 +90,105 @@ def add_watermark(image_data: bytes, text: str = "@eroslabai",
         return image_data  # Возвращаем оригинал при ошибке
 
 
+def add_watermark_to_video(video_data: bytes, text: str = "@eroslabai",
+                          opacity: float = 0.3, font_size_ratio: float = 0.04) -> bytes:
+    """
+    Накладывает водяной знак на видео.
+
+    Args:
+        video_data: Исходные данные видео
+        text: Текст водяного знака
+        opacity: Прозрачность (0.0 - 1.0)
+        font_size_ratio: Размер шрифта относительно высоты видео
+
+    Returns:
+        bytes: Видео с водяным знаком
+    """
+    import subprocess
+    import tempfile
+    import os
+
+    tmp_in = None
+    tmp_out = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
+            tmp.write(video_data)
+            tmp_in = tmp.name
+
+        tmp_out = tmp_in + "_watermarked.mp4"
+
+        # Получаем разрешение видео
+        cmd_probe = [
+            'ffprobe', '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height',
+            '-of', 'csv=s=x:p=0',
+            tmp_in
+        ]
+        result = subprocess.run(cmd_probe, capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            logger.warning("Could not read video dimensions for watermark")
+            return video_data
+
+        raw = result.stdout.strip()
+        width, height = map(int, raw.split("x", 1))
+
+        font_size = max(20, int(height * font_size_ratio))
+        margin = 20
+        alpha = int(opacity * 255)
+
+        # Фильтр для наложения текста
+        drawtext_filter = (
+            f"drawtext=text='{text}':"
+            f"fontcolor=white@{alpha}:"
+            f"fontsize={font_size}:"
+            f"x=w-tw-{margin}:"
+            f"y=h-th-{margin}:"
+            "shadowcolor=black@0.5:"
+            "shadowx=2:"
+            "shadowy=2"
+        )
+
+        cmd = [
+            'ffmpeg', '-y', '-i', tmp_in,
+            '-vf', drawtext_filter,
+            '-c:v', 'libx264', '-crf', '23', '-preset', 'medium',
+            '-c:a', 'copy',
+            tmp_out
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        if result.returncode != 0:
+            logger.warning(f"Video watermark failed: {result.stderr}")
+            return video_data
+
+        with open(tmp_out, 'rb') as f:
+            watermarked_data = f.read()
+
+        logger.info(f"Watermark added to video: '{text}' (opacity: {int(opacity * 100)}%)")
+        return watermarked_data
+
+    except Exception as e:
+        logger.error(f"Video watermark error: {e}")
+        return video_data
+    finally:
+        if tmp_in and os.path.exists(tmp_in):
+            os.unlink(tmp_in)
+        if tmp_out and os.path.exists(tmp_out):
+            os.unlink(tmp_out)
+
+
 def should_add_watermark(url: str) -> bool:
     """
     Проверяем, нужно ли добавлять водяной знак.
 
     Args:
-        url: URL изображения
+        url: URL медиа
 
     Returns:
         bool: True если нужно добавить водяной знак
     """
-    video_extensions = (".mp4", ".webm", ".gif")
-    return not url.lower().endswith(video_extensions)
+    return True
 
 
 if __name__ == "__main__":

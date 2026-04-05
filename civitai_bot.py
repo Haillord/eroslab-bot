@@ -24,7 +24,7 @@ import telegram
 from telegram import Bot
 from caption_generator import generate_caption
 from rule34_api import fetch_rule34
-from watermark import add_watermark, should_add_watermark
+from watermark import add_watermark, add_watermark_to_video, should_add_watermark
 
 # ==================== НАСТРОЙКИ ====================
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -1507,6 +1507,18 @@ async def main():
                 save_all()
                 continue
             
+            # Добавляем водяной знак
+            if should_add_watermark(item.get("url", "")):
+                try:
+                    opacity = max(0.0, min(1.0, WATERMARK_IMAGE_OPACITY))
+                    data = add_watermark_to_video(
+                        video_data=data,
+                        text=WATERMARK_IMAGE_TEXT,
+                        opacity=opacity,
+                    )
+                except Exception as e:
+                    logger.warning(f"Video watermark apply failed, using original video: {e}")
+
             # Исправляем соотношение сторон если это нужно для Телеграма
             data = normalize_video_aspect_ratio(data)
 
