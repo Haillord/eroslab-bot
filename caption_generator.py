@@ -56,8 +56,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
 ENABLE_AI_VISION = os.environ.get("ENABLE_AI_VISION", "true").lower() in ("1", "true", "yes", "on")
-OPENROUTER_VISION_MODEL = os.environ.get("OPENROUTER_VISION_MODEL", "meta/llama-3.2-11b-vision-instruct:free")
-OPENROUTER_VISION_FALLBACK_MODEL = os.environ.get("OPENROUTER_VISION_FALLBACK_MODEL", "meta/llama-3.2-11b-vision-instruct:free")
+# Groq Vision работает без фильтров 100% с NSFW контентом
 ENABLE_STYLE_BLOCK = os.environ.get("ENABLE_STYLE_BLOCK", "true").lower() in ("1", "true", "yes", "on")
 STYLE_BLOCK_MAX_ITEMS = int(os.environ.get("STYLE_BLOCK_MAX_ITEMS", "3"))
 CAPTION_STYLE = os.environ.get("CAPTION_STYLE", "story").strip().lower()
@@ -485,30 +484,29 @@ def _call_ai_vision(
     temperature=0.2,
     retries=1,
 ):
-    if not ENABLE_AI_VISION or not OPENROUTER_API_KEY:
+    if not ENABLE_AI_VISION or not GROQ_API_KEY:
         return None
 
     primary_url = image_url or _build_image_data_url(image_data)
-    secondary_url = secondary_image_url or _build_image_data_url(secondary_image_data)
 
-    if not primary_url and not secondary_url:
+    if not primary_url:
         return None
 
-    content = [{"type": "text", "text": prompt}]
-    if primary_url:
-        content.append({"type": "image_url", "image_url": {"url": primary_url}})
-    if secondary_url:
-        content.append({"type": "image_url", "image_url": {"url": secondary_url}})
+    content = [
+        {"type": "text", "text": prompt},
+        {"type": "image_url", "image_url": {"url": primary_url}}
+    ]
 
-    url = "https://openrouter.ai/api/v1/chat/completions"
+    url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": model or OPENROUTER_VISION_MODEL,
+        "model": "llama-3.2-11b-vision-preview",
         "temperature": temperature,
         "max_tokens": max_tokens,
+        "stream": False,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": content},
@@ -569,29 +567,12 @@ def _extract_visual_hint(
         image_url=image_url,
         secondary_image_data=secondary_image_data,
         secondary_image_url=secondary_image_url,
-        model=OPENROUTER_VISION_MODEL,
         max_tokens=80,
         temperature=0.1,
         retries=1,
     )
 
-    if _is_non_informative(hint) and OPENROUTER_VISION_FALLBACK_MODEL:
-        logger.info(
-            "Vision primary model returned empty/non-informative response. "
-            f"Trying fallback model: {OPENROUTER_VISION_FALLBACK_MODEL}"
-        )
-        hint = _call_ai_vision(
-            prompt,
-            system,
-            image_data=image_data,
-            image_url=image_url,
-            secondary_image_data=secondary_image_data,
-            secondary_image_url=secondary_image_url,
-            model=OPENROUTER_VISION_FALLBACK_MODEL,
-            max_tokens=80,
-            temperature=0.1,
-            retries=1,
-        )
+    # Groq Vision не нуждается в фоллбеке
 
     if _is_non_informative(hint):
         logger.info("Vision hint unavailable: empty/non-informative response from vision models")
