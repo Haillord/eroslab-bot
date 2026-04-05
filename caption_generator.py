@@ -103,11 +103,11 @@ TITLE_VARIANTS_3D = (
 )
 
 CTA_VARIANTS = (
-    "💬 Как тебе такой формат?",
-    "💬 Делись мнением в комментариях",
-    "💬 Твой фидбек делает ленту лучше",
-    "💬 Оценим пост в реакциях и комментах",
-    "💬 Пиши, что добавить в следующий дроп",
+    "💬 Как тебе этот пост?",
+    "💬 Как тебе этот вариант?",
+    "💬 Как?",
+    "💬 Норм?",
+    "💬 Заходит?",
 )
 
 # Список vision-моделей: фоллбек от лучшей к запасной
@@ -340,7 +340,7 @@ def _assemble_caption(style, content_type, title_line, tech_block, body_text, st
     if hashtags:
         sections.append(hashtags)
 
-    cta_line = UNIVERSAL_CTA or "💬 Как тебе этот пост?"
+    cta_line = random.choice(CTA_VARIANTS)
     sections.append(f"{cta_line}\n{footer}")
 
     return "\n\n".join(s for s in sections if s)
