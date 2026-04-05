@@ -191,6 +191,19 @@ def should_add_watermark(url: str) -> bool:
     return True
 
 
+def should_fix_aspect_ratio(url: str) -> bool:
+    """
+    Проверяем, нужно ли исправлять соотношение сторон для Телеграм.
+
+    Args:
+        url: URL медиа
+
+    Returns:
+        bool: True если нужно применять исправление
+    """
+    return True
+
+
 if __name__ == "__main__":
     import requests
 

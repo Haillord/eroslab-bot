@@ -374,15 +374,16 @@ def normalize_video_aspect_ratio(data: bytes) -> bytes:
             vf_filter = f"pad=w={width}:h={target_height}:x=0:y={pad}:color=black"
             logger.info(f"Video aspect ratio fix: horizontal {width}x{height} ratio={ratio:.3f}, adding {pad}px top/bottom padding")
         
+        # Используем быстрый пресет и увеличиваем таймаут для больших видео
         cmd = [
             'ffmpeg', '-y', '-i', tmp_in,
             '-vf', vf_filter,
-            '-c:v', 'libx264', '-crf', '23', '-preset', 'medium',
+            '-c:v', 'libx264', '-crf', '24', '-preset', 'fast',
             '-c:a', 'copy',
             tmp_out
         ]
         
-        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, timeout=120)
         if result.returncode != 0:
             logger.warning(f"Video aspect ratio fix failed, using original")
             return data
