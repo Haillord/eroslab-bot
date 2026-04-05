@@ -73,11 +73,8 @@
 
 ---
 
-<p align="right">
-  <img src="https://img.shields.io/badge/Made%20with-Python-3776AB?style=flat-square&logo=python" alt="python">
-  <img src="https://img.shields.io/badge/Powered%20by-GitHub%20Actions-2088FF?style=flat-square&logo=github-actions" alt="actions">
-</p>
-
 <p align="center">
-  <sub>Developed by <b>Haillord</b></sub>
+  <img src="https://img.shields.io/badge/Made%20with-Python-3776AB?style=for-the-badge&logo=python" alt="python">
+  <img src="https://img.shields.io/badge/Powered%20by-GitHub%20Actions-2088FF?style=for-the-badge&logo=github-actions" alt="actions">
+  <img src="https://img.shields.io/badge/Developer-Haillord-red?style=for-the-badge&logo=telegram" alt="author">
 </p>
