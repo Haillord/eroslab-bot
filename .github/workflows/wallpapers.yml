@@ -34,16 +34,6 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Setup yt-dlp
-        uses: AnimMouse/setup-yt-dlp@v3
-        with:
-          ffmpeg: true
-
-      - name: Install ffmpeg (fallback)
-        if: steps.setup-yt-dlp.outputs.ffmpeg != 'true'
-        run: |
-          sudo apt-get update --quiet
-          sudo apt-get install -y ffmpeg --no-install-recommends
 
       - name: Run Wallpapers Bot
         env:
