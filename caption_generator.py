@@ -503,7 +503,7 @@ def _call_ai_vision(
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "llama-3.2-11b-vision-preview",
+        "model": "google/gemma-3-27b-it:free",
         "temperature": temperature,
         "max_tokens": max_tokens,
         "stream": False,
