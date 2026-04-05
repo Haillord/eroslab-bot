@@ -34,7 +34,7 @@ CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 
 WATERMARK_ENABLED = False
 MIN_LIKES        = 25
-MIN_IMAGE_SIZE   = 1080
+MIN_IMAGE_SIZE   = 720
 MIN_ASPECT_RATIO_MIN = 0.5  # 9:16 вертикальные
 MIN_ASPECT_RATIO_MAX = 2.0  # 16:9 горизонтальные
 IMAGE_PACK_SIZE = 4
@@ -166,8 +166,8 @@ def check_media_size(data, url):
             img = Image.open(BytesIO(data))
             width, height = img.size
             aspect = width / height
-            
-            if width >= MIN_IMAGE_SIZE and height >= MIN_IMAGE_SIZE * 0.7 and MIN_ASPECT_RATIO_MIN <= aspect <= MIN_ASPECT_RATIO_MAX:
+
+            if max(width, height) >= MIN_IMAGE_SIZE and MIN_ASPECT_RATIO_MIN <= aspect <= MIN_ASPECT_RATIO_MAX:
                 return True
             else:
                 logger.warning(f"Image not suitable: {width}x{height} ratio={aspect:.2f}")
