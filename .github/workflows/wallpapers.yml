@@ -1,6 +1,8 @@
 name: ErosLab Wallpapers Bot
 
 on:
+  schedule:
+    - cron: '15 */3 * * *'
   workflow_dispatch:
 
 jobs:
@@ -37,6 +39,8 @@ jobs:
 
       - name: Run Wallpapers Bot
         env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
           TELEGRAM_BOT_TOKEN_WALLPAPERS: ${{ secrets.TELEGRAM_BOT_TOKEN_WALLPAPERS }}
           TELEGRAM_CHANNEL_ID_WALLPAPERS: ${{ secrets.TELEGRAM_CHANNEL_ID_WALLPAPERS }}
           ADMIN_USER_ID: ${{ secrets.ADMIN_USER_ID }}
@@ -44,32 +48,3 @@ jobs:
           STATS_TZ: "Europe/Moscow"
         run: python wallpapers_bot.py
         
-      - name: Commit and push updates
-        if: always()
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git pull origin main --no-rebase || true
-          
-          git add posted_ids_wallpapers.json posted_hashes_wallpapers.json stats_wallpapers.json content_state_wallpapers.json 2>/dev/null || true
-          
-          if git diff --cached --quiet; then
-            echo "📝 No changes to commit"
-            exit 0
-          fi
-          
-          git commit -m "📊 Update wallpapers history [skip ci]"
-          
-          for i in {1..3}; do
-            if git push; then
-              echo "✅ Successfully pushed"
-              exit 0
-            fi
-            echo "Push failed, attempting pull and retry..."
-            git pull origin main --no-rebase || true
-            sleep 5
-          done
-          
-          echo "❌ Failed to push after retries"
-          exit 1
