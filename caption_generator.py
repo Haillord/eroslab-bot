@@ -524,11 +524,11 @@ def _call_ai_vision(
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "meta/llama-3.2-90b-vision-instruct",
+        "model": "qwen/qwen2.5-vl-72b-instruct:free",
         "temperature": temperature,
         "max_tokens": max_tokens,
         "provider": {
-            "order": ["OpenRouter"]
+            "order": ["Fireworks"]
         },
         "messages": [
             {"role": "system", "content": system_prompt},
