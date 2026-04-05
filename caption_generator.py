@@ -484,10 +484,10 @@ def _call_ai_vision(
     temperature=0.2,
     retries=1,
 ):
-    if not ENABLE_AI_VISION or not GROQ_API_KEY:
+    if not ENABLE_AI_VISION or not OPENROUTER_API_KEY:
         return None
 
-    primary_url = image_url or _build_image_data_url(image_data)
+    primary_url = image_url
 
     if not primary_url:
         return None
@@ -497,16 +497,15 @@ def _call_ai_vision(
         {"type": "image_url", "image_url": {"url": primary_url}}
     ]
 
-    url = "https://api.groq.com/openai/v1/chat/completions"
+    url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "google/gemma-3-27b-it:free",
+        "model": "meta/llama-3.2-90b-vision-instruct",
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "stream": False,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": content},
