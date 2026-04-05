@@ -1506,9 +1506,14 @@ async def main():
             f"target={IMAGE_PACK_SIZE}, built={len(image_pack)}, use_pack={use_image_pack}"
         )
 
-    # Vision отключен: не тратим время на извлечение кадров для подписи.
     caption_image_data = None
     caption_secondary_image_data = None
+
+    if is_video and data:
+        thumb = get_video_thumbnail(data, seek_sec=2.0)
+        if thumb:
+            caption_image_data = thumb
+            logger.info(f"Video thumbnail extracted for vision: {len(thumb)} bytes")
 
     # ========== ОТПРАВКА В TELEGRAM ==========
     bot = Bot(token=TELEGRAM_BOT_TOKEN)

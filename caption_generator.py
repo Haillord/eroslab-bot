@@ -493,6 +493,9 @@ def _call_ai_vision(
 
     primary_url = image_url
 
+    if not primary_url and image_data:
+        primary_url = _build_image_data_url(image_data)
+
     if not primary_url:
         return None
 
