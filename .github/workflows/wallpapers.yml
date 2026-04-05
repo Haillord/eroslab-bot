@@ -1,12 +1,10 @@
-name: ErosLab Bot
+name: ErosLab Wallpapers Bot
 
 on:
-  schedule:
-    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:
-  post:
+  post_wallpapers:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -36,11 +34,10 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # ←←← НОВЫЙ ШАГ: Лучшая установка yt-dlp для GitHub Actions
       - name: Setup yt-dlp
         uses: AnimMouse/setup-yt-dlp@v3
         with:
-          ffmpeg: true        # автоматически установит ffmpeg + yt-dlp
+          ffmpeg: true
 
       - name: Install ffmpeg (fallback)
         if: steps.setup-yt-dlp.outputs.ffmpeg != 'true'
@@ -48,37 +45,14 @@ jobs:
           sudo apt-get update --quiet
           sudo apt-get install -y ffmpeg --no-install-recommends
 
-      - name: Run ErosLab Bot (CivitAI)
+      - name: Run Wallpapers Bot
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TELEGRAM_BOT_TOKEN_WALLPAPERS: ${{ secrets.TELEGRAM_BOT_TOKEN_WALLPAPERS }}
+          TELEGRAM_CHANNEL_ID_WALLPAPERS: ${{ secrets.TELEGRAM_CHANNEL_ID_WALLPAPERS }}
           ADMIN_USER_ID: ${{ secrets.ADMIN_USER_ID }}
           CIVITAI_API_KEY: ${{ secrets.CIVITAI_API_KEY }}
-          REVIEW_MODE: "false"
-          ALLOW_MATURE_FALLBACK: "false"
-          ENABLE_VIDEO_QOS: "true"
-          MIN_BITRATE_480P: "900"
-          MIN_BITRATE_720P: "1400"
-          MIN_BITRATE_1080P: "2200"
-          R34_API_KEY: ${{ secrets.R34_API_KEY }}
-          R34_USER_ID: ${{ secrets.R34_USER_ID }}
-          RULE34_MIN_SCORE: "10"
-          POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ENABLE_AI_CAPTION: "true"
-          ENABLE_AI_CTA: "true"
-          AI_DRY_RUN: "false"
-          AI_PROVIDER: "auto"
-          AI_TIMEOUT_SEC: "12"
-          GROQ_MODEL: "llama-3.3-70b-versatile"
-          OPENROUTER_MODEL: "openai/gpt-4o-mini"
-          ENABLE_STYLE_BLOCK: "true"
-          STYLE_BLOCK_MAX_ITEMS: "3"
-          CAPTION_STYLE: "minimal"
           STATS_TZ: "Europe/Moscow"
-        run: python civitai_bot.py
-
+        run: python wallpapers_bot.py
         
       - name: Commit and push updates
         if: always()
@@ -86,19 +60,17 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Сначала делаем pull, чтобы получить последние изменения
           git pull origin main --no-rebase || true
           
-           git add posted_ids.json posted_hashes.json stats.json apt-ffmpeg-version.txt content_state.json pending_draft.json review_state.json 2>/dev/null || true
+          git add posted_ids_wallpapers.json posted_hashes_wallpapers.json stats_wallpapers.json content_state_wallpapers.json 2>/dev/null || true
           
           if git diff --cached --quiet; then
             echo "📝 No changes to commit"
             exit 0
           fi
           
-          git commit -m "📊 Update posted history [skip ci]"
+          git commit -m "📊 Update wallpapers history [skip ci]"
           
-          # Пробуем push с предварительным pull при конфликте
           for i in {1..3}; do
             if git push; then
               echo "✅ Successfully pushed"
