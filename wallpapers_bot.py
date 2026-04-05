@@ -356,17 +356,17 @@ def _is_safe_rating(nsfw_level):
     if isinstance(nsfw_level, str):
         return nsfw_level.strip().lower() in {"none", "soft"}
     if isinstance(nsfw_level, (int, float)):
-        return nsfw_level <= 4  # битовая маска до PG-13
+        return nsfw_level <= 2  # None=1, Soft=2
     return False
 
 
 def fetch_civitai(max_pages: int = 5):
     variations = [
         # Приоритет: сначала свежее за неделю
-        {"browsingLevel": 4, "nsfw": "Soft", "sort": "Most Reactions", "period": "Week"},
-        {"browsingLevel": 4, "nsfw": "Soft", "sort": "Most Reactions", "period": "Month"},
-        {"browsingLevel": 4, "nsfw": "Soft", "sort": "Most Reactions", "period": "AllTime"},
-        {"browsingLevel": 4, "nsfw": "Soft", "sort": "Most Reactions", "period": "AllTime", "tags": "wallpaper"},
+        {"browsingLevel": 3, "nsfw": "Soft", "sort": "Most Reactions", "period": "Week"},
+        {"browsingLevel": 3, "nsfw": "Soft", "sort": "Most Reactions", "period": "Month"},
+        {"browsingLevel": 3, "nsfw": "Soft", "sort": "Most Reactions", "period": "AllTime"},
+        {"browsingLevel": 3, "nsfw": "Soft", "sort": "Most Reactions", "period": "AllTime", "tags": "wallpaper"},
     ]
 
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
