@@ -140,7 +140,7 @@ def add_watermark_to_video(video_data: bytes, text: str = "@eroslabai",
         # Фильтр для наложения текста
         drawtext_filter = (
             f"drawtext=text='{text}':"
-            f"fontcolor=white@{alpha}:"
+            f"fontcolor=white@{opacity:.2f}:"
             f"fontsize={font_size}:"
             f"x=w-tw-{margin}:"
             f"y=h-th-{margin}:"

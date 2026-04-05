@@ -1520,8 +1520,14 @@ async def main():
                 except Exception as e:
                     logger.warning(f"Video watermark apply failed, using original video: {e}")
 
-            # Исправляем соотношение сторон если это нужно для Телеграма
-            data = normalize_video_aspect_ratio(data)
+            # Скипаем видео с соотношением 2:3
+            ratio = img_width / img_height
+            if 0.65 <= ratio <= 0.68:
+                logger.warning(f"Skipping video with aspect ratio 2:3: {img_width}x{img_height} ratio={ratio:.3f}")
+                run_metrics["skip_bad_video_ratio"] += 1
+                posted_ids.add(item["id"])
+                save_all()
+                continue
 
         img_hash = hashlib.sha256(data).hexdigest()
         if img_hash in posted_hashes:
