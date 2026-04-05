@@ -15,6 +15,7 @@ import tempfile
 import time
 import requests
 from io import BytesIO
+from gist_storage import load_all_state, save_all_state
 from pathlib import Path
 from urllib.parse import urlparse
 from datetime import datetime
@@ -86,9 +87,10 @@ def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-posted_ids    = set(load_json(HISTORY_FILE, []))
-posted_hashes = set(load_json(HASHES_FILE, []))
-content_state = load_json(CONTENT_STATE_FILE, {"last_type": "landscape"})
+_state = load_all_state()
+posted_ids    = set(_state.get("posted_ids_wallpapers.json", []))
+posted_hashes = set(_state.get("posted_hashes_wallpapers.json", []))
+content_state = _state.get("content_state_wallpapers.json", {"last_type": "landscape"})
 
 
 def _get_stats_day_key():
@@ -136,9 +138,12 @@ def record_run_stats(metrics: dict):
 def save_all():
     trimmed_ids    = list(posted_ids)[-MAX_HISTORY_SIZE:]
     trimmed_hashes = list(posted_hashes)[-MAX_HISTORY_SIZE:]
-    save_json(HISTORY_FILE, trimmed_ids)
-    save_json(HASHES_FILE,  trimmed_hashes)
-    save_json(CONTENT_STATE_FILE, content_state)
+    save_all_state({
+        "posted_ids_wallpapers.json":    trimmed_ids,
+        "posted_hashes_wallpapers.json": trimmed_hashes,
+        "content_state_wallpapers.json": content_state,
+        "stats_wallpapers.json":         _load_stats(),
+    })
 
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================

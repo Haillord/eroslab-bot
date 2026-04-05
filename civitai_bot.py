@@ -15,6 +15,7 @@ import tempfile
 import time
 import requests
 from io import BytesIO
+from gist_storage import load_all_state, save_all_state
 from pathlib import Path
 from urllib.parse import urlparse
 from datetime import datetime
@@ -131,11 +132,12 @@ def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-posted_ids    = set(load_json(HISTORY_FILE, []))
-posted_hashes = set(load_json(HASHES_FILE, []))
-content_state = load_json(CONTENT_STATE_FILE, {"last_type": "3d", "last_media": "video"})
-pending_draft = load_json(PENDING_DRAFT_FILE, {})
-review_state = load_json(REVIEW_STATE_FILE, {"last_update_id": 0})
+_state = load_all_state()
+posted_ids    = set(_state.get("posted_ids.json", []))
+posted_hashes = set(_state.get("posted_hashes.json", []))
+content_state = _state.get("content_state.json", {"last_type": "3d", "last_media": "video"})
+pending_draft = _state.get("pending_draft.json", {})
+review_state  = _state.get("review_state.json", {"last_update_id": 0})
 
 def _get_stats_day_key():
     try:
@@ -201,17 +203,22 @@ def get_next_media_type():
 def save_all():
     trimmed_ids    = list(posted_ids)[-MAX_HISTORY_SIZE:]
     trimmed_hashes = list(posted_hashes)[-MAX_HISTORY_SIZE:]
-    save_json(HISTORY_FILE, trimmed_ids)
-    save_json(HASHES_FILE,  trimmed_hashes)
-    save_json(CONTENT_STATE_FILE, content_state)
+    save_all_state({
+        "posted_ids.json":    trimmed_ids,
+        "posted_hashes.json": trimmed_hashes,
+        "content_state.json": content_state,
+        "pending_draft.json": pending_draft,
+        "review_state.json":  review_state,
+        "stats.json":         _load_stats(),
+    })
 
 
 def save_review_state():
-    save_json(REVIEW_STATE_FILE, review_state)
+    save_all()
 
 
 def save_pending_draft():
-    save_json(PENDING_DRAFT_FILE, pending_draft)
+    save_all()
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 def clean_tags(tags):
