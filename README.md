@@ -25,47 +25,71 @@
 
 ---
 
-### ⚡️ Killer Features
+<!-- FEATURES -->
+<table>
+<tr>
+<td width="50%">
 
-- **Serverless 24/7** — Полная автоматизация на GitHub Actions без затрат на сервер.
-- **Gist Database** — Хранение состояния в скрытых Gists: **никаких лишних коммитов** в истории.
-- **Smart Filtering** — Защита от дублей по хешу, автоматический контроль качества и разрешения.
-- **AI Engine** — Генерация контекстных подписей через Groq и OpenRouter (Llama 3 / Vision).
-- **Media Lab** — Наложение водяных знаков и оптимизация видео через FFmpeg на лету.
+**`Serverless 24/7`**
+Полная автоматизация на GitHub Actions без затрат на сервер
+
+</td>
+<td width="50%">
+
+**`Gist Database`**
+Хранение состояния в скрытых Gists — никаких лишних коммитов
+
+</td>
+</tr>
+<tr>
+<td>
+
+**`Smart Filtering`**
+Защита от дублей по хешу, контроль качества и разрешения
+
+</td>
+<td>
+
+**`AI Engine`**
+Генерация подписей через Groq и OpenRouter (Llama 3 / Vision)
+
+</td>
+</tr>
+<tr>
+<td colspan="2">
+
+**`Media Lab`**
+Наложение водяных знаков и оптимизация видео через FFmpeg на лету
+
+</td>
+</tr>
+</table>
 
 ---
 
-### 🛠 Stack & Integration
+### 🛠 Stack
 
-| Компонент | Технологии |
-| :--- | :--- |
-| **Engine** | Python 3.11 • `python-telegram-bot` |
-| **Automation** | GitHub Actions Workflow |
-| **Database** | GitHub Gist API |
-| **Content** | CivitAI • Rule34 • Wallhaven |
-| **AI Processing** | Groq • OpenRouter |
-| **Media** | FFmpeg • yt-dlp |
+`Python 3.11` · `GitHub Actions` · `Gist API` · `CivitAI` · `Rule34` · `Groq` · `OpenRouter` · `FFmpeg` · `yt-dlp`
 
 ---
 
 ### 📂 Structure
 ```text
-📜 civitai_bot.py      # Основной движок (NSFW)
-📜 wallpapers_bot.py   # Бот с обоями (SFW)
-📜 gist_storage.py     # Логика работы с БД Gist
-📜 caption_gen.py      # AI-генератор описаний
-📜 watermark.py        # Обработка фото и видео
+▸ civitai_bot.py      // основной движок (nsfw)
+▸ wallpapers_bot.py   // бот с обоями (sfw)
+▸ gist_storage.py     // логика работы с БД Gist
+▸ caption_gen.py      // ai-генератор описаний
+▸ watermark.py        // обработка фото и видео
 ```
 
 ---
 
-### 🔑 Configuration (Secrets)
+### 🔑 Secrets
 
-Настройте эти переменные в репозитории:  
-`Settings` → `Secrets and variables` → `Actions`
+> `Settings` → `Secrets and variables` → `Actions`
 
-| Secret | Описание |
-| :--- | :--- |
+| Secret | |
+|:---|:---|
 | `TELEGRAM_BOT_TOKEN` | Токен основного бота |
 | `GH_TOKEN` | Classic Token с правами на Gist |
 | `GIST_ID` | ID вашего секретного Gist |
