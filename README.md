@@ -3,7 +3,6 @@
 </p>
 
 <p align="center">
-  <a href="https://git.io/typing-svg">
     <img src="https://readme-typing-svg.demolab.com?font=monospace&size=20&pause=2000&color=FF2244&center=true&width=600&lines=ErosLab+Bot+Ecosystem+🔞;Serverless+24%2F7+на+GitHub+Actions;AI-генерация+через+Groq+%26+Llama+3;Умная+фильтрация+и+защита+от+дублей;Бесплатный+хостинг+•+Полная+автономность">
   </a>
 </p>
