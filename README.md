@@ -17,12 +17,10 @@
 </p>
 
 <p align="center">
-  <a href="https://t.me/eroslabai">
-    <img src="https://img.shields.io/badge/🔞_Основной_канал-FF2244?style=for-the-badge&logo=telegram&logoColor=white"/>
-  </a>
-  <a href="https://t.me/eroslabwallpaper">
-    <img src="https://img.shields.io/badge/🤍_Обои-white?style=for-the-badge&logo=telegram&logoColor=black"/>
-  </a>
+
+[![](https://img.shields.io/badge/🔞_Основной_канал-FF2244?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/eroslabai)
+[![](https://img.shields.io/badge/🤍_Обои-white?style=for-the-badge&logo=telegram&logoColor=black)](https://t.me/eroslabwallpaper)
+
 </p>
 
 ---
