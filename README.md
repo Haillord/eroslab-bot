@@ -16,12 +16,16 @@
   <img src="banner.svg?v=5" width="100%" alt="ErosLab Bot Ecosystem">
 </p>
 
-<div align="center">
+<p align="center">
 
 [![](https://img.shields.io/badge/🔞_Основной_канал-FF2244?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/eroslabai)
 [![](https://img.shields.io/badge/🤍_Обои-white?style=for-the-badge&logo=telegram&logoColor=black)](https://t.me/eroslabwallpaper)
 
-</div>
+<br>
+</p>
+=======
+</p>
+>>>>>>> b7cf899b3ee26d4811efd3c6db57c94084d8dc05
 
 ---
 
