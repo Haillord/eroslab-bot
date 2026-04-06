@@ -17,9 +17,12 @@
 </p>
 
 <p align="center">
-  <a href="https://t.me/eroslabai"><strong>🔞 Основной канал</strong></a>
-  •
-  <a href="https://t.me/eroslabwallpaper"><strong>🤍 Обои</strong></a>
+  <a href="https://t.me/eroslabai">
+    <img src="https://img.shields.io/badge/🔞_Основной_канал-FF2244?style=for-the-badge&logo=telegram&logoColor=white"/>
+  </a>
+  <a href="https://t.me/eroslabwallpaper">
+    <img src="https://img.shields.io/badge/🤍_Обои-white?style=for-the-badge&logo=telegram&logoColor=black"/>
+  </a>
 </p>
 
 ---
