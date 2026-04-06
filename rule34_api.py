@@ -84,9 +84,13 @@ def fetch_rule34(tags: str = None, limit: int = 100, content_type: str = "mixed"
     all_results = []
     max_pages = 10  # Ищем по 10 страницам
     min_posts = 50  # Минимум постов для выбора
+    start_page = random.randint(0, 15)  # ✅ Случайная стартовая страница от 0 до 15
+    
+    logger.info(f"Rule34: starting from random page {start_page}, scanning next {max_pages} pages")
     
     # Rule34 API: pid=0 — первая страница, pid=1 — вторая, и т.д.
-    for page in range(0, max_pages):
+    for page_offset in range(0, max_pages):
+        page = start_page + page_offset
         params = {
             "page": "dapi",
             "s": "post",
