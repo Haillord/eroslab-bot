@@ -80,15 +80,14 @@
 <details>
 <summary><b>Показать структуру проекта</b></summary>
 <br>
-```text
+<pre>
 eroslab-bot/
 ├── civitai_bot.py      — основной движок (nsfw)
 ├── wallpapers_bot.py   — бот с обоями (sfw)
 ├── gist_storage.py     — логика работы с БД Gist
 ├── caption_gen.py      — ai-генератор описаний
 └── watermark.py        — обработка фото и видео
-```
-
+</pre>
 </details>
 
 ---
