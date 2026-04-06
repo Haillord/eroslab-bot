@@ -421,6 +421,138 @@ def get_min_bitrate_kbps_for_height(height):
         return MIN_BITRATE_720P
     return MIN_BITRATE_480P
 
+def validate_video(data: bytes) -> dict:
+    """
+    Проверяет видео на совместимость с мобильным Telegram.
+    Возвращает: {"is_valid": bool, "issues": list}
+    """
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+
+        cmd = [
+            'ffprobe', '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=codec_name,pix_fmt,width,height',
+            '-of', 'default=noprint_wrappers=1:nokey=0',
+            tmp_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            return {"is_valid": False, "issues": ["ffprobe failed to read video stream"]}
+
+        issues = []
+        codec_name = ""
+        pix_fmt = ""
+        width = 0
+        height = 0
+
+        for line in result.stdout.strip().splitlines():
+            if '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            value = value.strip()
+            
+            if key == 'codec_name':
+                codec_name = value
+                if value not in ('h264', 'hevc', 'h265') or value == 'wrapped_avframe':
+                    issues.append(f"Неподдерживаемый кодек: {value}")
+            elif key == 'pix_fmt':
+                pix_fmt = value
+                if value not in ('yuv420p', 'yuvj420p') or '10le' in value or '12le' in value or '444p' in value:
+                    issues.append(f"Несовместимый формат пикселей: {value}")
+            elif key == 'width':
+                width = int(value) if value.isdigit() else 0
+                if width > 1080:
+                    issues.append(f"Ширина больше лимита: {width}px")
+            elif key == 'height':
+                height = int(value) if value.isdigit() else 0
+                if height > 1080:
+                    issues.append(f"Высота больше лимита: {height}px")
+
+        return {
+            "is_valid": len(issues) == 0,
+            "issues": issues,
+            "codec": codec_name,
+            "pix_fmt": pix_fmt,
+            "width": width,
+            "height": height
+        }
+
+    except Exception as e:
+        logger.error(f"Video validation error: {e}")
+        return {"is_valid": False, "issues": [f"Validation error: {str(e)}"]}
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+def normalize_video_format(data: bytes) -> bytes:
+    """
+    Автоматически исправляет несовместимые видео:
+    - Конвертирует в yuv420p 8bit
+    - Даунскейлит до 1080px по большей стороне
+    - Кодек libx264 профиль main максимальная совместимость
+    - Аудио копируется как есть
+    """
+    validation = validate_video(data)
+    if validation["is_valid"]:
+        return data
+
+    logger.info(f"Видео требует конвертации, проблемы: {', '.join(validation['issues'])}")
+    
+    tmp_in = None
+    tmp_out = None
+    try:
+        start_time = time.time()
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
+            tmp.write(data)
+            tmp_in = tmp.name
+        
+        tmp_out = tmp_in + "_fixed.mp4"
+        
+        cmd = [
+            'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+            '-i', tmp_in,
+            '-c:v', 'libx264',
+            '-crf', '22',
+            '-preset', 'fast',
+            '-profile:v', 'main',
+            '-level', '4.0',
+            '-pix_fmt', 'yuv420p',
+            '-vf', "scale='if(gt(iw,ih),1080,-2)':'if(gt(iw,ih),-2,1080)'",
+            '-c:a', 'copy',
+            '-movflags', '+faststart',
+            tmp_out
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, timeout=180)
+        if result.returncode != 0:
+            logger.warning(f"Не удалось сконвертировать видео, отправляю оригинал. ffmpeg ошибка: {result.stderr.decode(errors='ignore')[:200]}")
+            return data
+        
+        with open(tmp_out, 'rb') as f:
+            fixed_data = f.read()
+        
+        elapsed = time.time() - start_time
+        logger.info(f"✅ Видео успешно конвертировано за {elapsed:.1f}с, размер: {len(data)} -> {len(fixed_data)} байт")
+        
+        return fixed_data
+        
+    except Exception as e:
+        logger.error(f"Ошибка конвертации видео: {e}")
+        return data
+    finally:
+        if tmp_in and os.path.exists(tmp_in):
+            os.unlink(tmp_in)
+        if tmp_out and os.path.exists(tmp_out):
+            os.unlink(tmp_out)
+
+
 def get_video_thumbnail(data: bytes, seek_sec: float = 2.0) -> bytes:
     """Извлекает кадр видео как JPEG bytes для vision."""
     tmp_in = None
@@ -1537,6 +1669,9 @@ async def main():
                     posted_ids.add(item["id"])
                     save_all()
                     continue
+            
+            # ✅ Автоматическая проверка и исправление формата видео для мобильного Telegram
+            data = normalize_video_format(data)
 
         img_hash = hashlib.sha256(data).hexdigest()
         if img_hash in posted_hashes:
