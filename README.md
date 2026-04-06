@@ -3,6 +3,12 @@
 </p>
 
 <p align="center">
+  <a href="https://git.io/typing-svg">
+    <img src="https://readme-typing-svg.demolab.com?font=monospace&size=20&pause=2000&color=FF2244&center=true&width=600&lines=ErosLab+Bot+Ecosystem+🔞;Serverless+24%2F7+на+GitHub+Actions;AI-генерация+через+Groq+%26+Llama+3;Умная+фильтрация+и+защита+от+дублей;Бесплатный+хостинг+•+Полная+автономность">
+  </a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/github/license/Haillord/eroslab-bot?style=for-the-badge&color=red" alt="license">
   <img src="https://img.shields.io/github/stars/Haillord/eroslab-bot?style=for-the-badge&color=red" alt="stars">
   <img src="https://img.shields.io/github/actions/workflow/status/Haillord/eroslab-bot/bot.yml?style=for-the-badge&label=Bot%20Status" alt="workflow">
@@ -17,7 +23,7 @@
 
 <p align="center">
   <a href="https://t.me/eroslabai"><strong>🔞 Основной канал</strong></a>
-  • 
+  •
   <a href="https://t.me/eroslabwallpaper"><strong>🤍 Обои</strong></a>
 </p>
 
@@ -25,11 +31,11 @@
 
 ### ⚡️ Killer Features
 
-*   **Serverless 24/7** - Полная автоматизация на GitHub Actions без затрат на сервер.
-*   **Gist Database** - Хранение состояния в скрытых Gists: **никаких лишних коммитов** в истории.
-*   **Smart Filtering** - Защита от дублей по хешу, автоматический контроль качества и разрешения.
-*   **AI Engine** - Генерация контекстных подписей через Groq и OpenRouter (Llama 3 / Vision).
-*   **Media Lab** - Наложение водяных знаков и оптимизация видео через FFmpeg на лету.
+- **Serverless 24/7** — Полная автоматизация на GitHub Actions без затрат на сервер.
+- **Gist Database** — Хранение состояния в скрытых Gists: **никаких лишних коммитов** в истории.
+- **Smart Filtering** — Защита от дублей по хешу, автоматический контроль качества и разрешения.
+- **AI Engine** — Генерация контекстных подписей через Groq и OpenRouter (Llama 3 / Vision).
+- **Media Lab** — Наложение водяных знаков и оптимизация видео через FFmpeg на лету.
 
 ---
 
@@ -60,11 +66,11 @@
 
 ### 🔑 Configuration (Secrets)
 
-Настройте эти переменные в репозитории:
+Настройте эти переменные в репозитории:  
 `Settings` → `Secrets and variables` → `Actions`
 
 | Secret | Описание |
-|---|---|
+| :--- | :--- |
 | `TELEGRAM_BOT_TOKEN` | Токен основного бота |
 | `GH_TOKEN` | Classic Token с правами на Gist |
 | `GIST_ID` | ID вашего секретного Gist |
