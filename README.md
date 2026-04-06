@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png?v=5" width="100%" alt="ErosLab Banner">
+  <img src="angel_gothic_FOR_GITHUB.webp" width="100%" alt="ErosLab Gothic Angel">
 </p>
 
 <p align="center">
