@@ -28,6 +28,8 @@ from watermark import should_add_watermark
 
 
 # ==================== НАСТРОЙКИ ====================
+ENABLE_CIVITAI = False  # ✅ Поставь False чтобы отключить CivitAI полностью
+
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN_WALLPAPERS", "")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID_WALLPAPERS", "")
 ADMIN_USER_ID = str(os.environ.get("ADMIN_USER_ID", "")).strip()
@@ -550,7 +552,10 @@ def fetch_civitai(max_pages: int = 5):
 def fetch_and_pick():
     preferred_orientation = get_preferred_orientation()
     
-    sources = [fetch_civitai, fetch_wallhaven]
+    sources = []
+    if ENABLE_CIVITAI:
+        sources.append(fetch_civitai)
+    sources.append(fetch_wallhaven)
     random.shuffle(sources)
     
     items = []
