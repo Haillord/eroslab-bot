@@ -152,12 +152,12 @@ def add_watermark_to_video(video_data: bytes, text: str = "@eroslabai",
         cmd = [
             'ffmpeg', '-y', '-i', tmp_in,
             '-vf', drawtext_filter,
-            '-c:v', 'libx264', '-crf', '23', '-preset', 'medium',
+            '-c:v', 'libx264', '-crf', '23', '-preset', 'fast',
             '-c:a', 'copy',
             tmp_out
         ]
 
-        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, timeout=120)
         if result.returncode != 0:
             logger.warning(f"Video watermark failed: {result.stderr}")
             return video_data
