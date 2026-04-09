@@ -660,7 +660,7 @@ async def publish_item_to_channel(bot: Bot, item: dict):
         # Ресайз если изображение слишком большое по пикселям
         img = Image.open(BytesIO(image_data))
         w, h = img.size
-        max_px = 2560
+        max_px = 3840
         if max(w, h) > max_px:
             scale = max_px / max(w, h)
             img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
