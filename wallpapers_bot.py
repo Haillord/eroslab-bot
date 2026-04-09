@@ -657,6 +657,18 @@ async def publish_item_to_channel(bot: Bot, item: dict):
         r.raise_for_status()
         image_data = r.content
 
+        # Ресайз если изображение слишком большое по пикселям
+        img = Image.open(BytesIO(image_data))
+        w, h = img.size
+        max_px = 2560
+        if max(w, h) > max_px:
+            scale = max_px / max(w, h)
+            img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+            out = BytesIO()
+            img.save(out, format="JPEG", quality=88)
+            image_data = out.getvalue()
+            logger.info(f"Resized {w}x{h} -> {int(w*scale)}x{int(h*scale)}")
+
         if not check_media_size(image_data, item.get("url")):
             return False
 
