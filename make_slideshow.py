@@ -61,11 +61,11 @@ def load_gist_state():
 
 def get_wallhaven_urls(ids: list, count: int) -> list:
     """Берёт последние N wallhaven ID и получает прямые URL картинок."""
-    wallhaven_ids = [
+    wallhaven_ids = list(dict.fromkeys([
         i.replace("wallhaven_", "")
         for i in reversed(ids)
         if i.startswith("wallhaven_")
-    ][:count]
+    ]))[:count]
 
     urls = []
     api_key = os.environ.get("WALLHAVEN_API_KEY", "")
