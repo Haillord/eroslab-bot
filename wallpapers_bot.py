@@ -717,9 +717,6 @@ async def publish_item_to_channel(bot: Bot, item: dict):
     except Exception as e:
         logger.warning(f"Publish failed: {e}")
         return False
-    img = Image.open(BytesIO(image_data))
-if img.mode == 'RGBA' or img.mode == 'P':
-    img = img.convert('RGB')
 
 
 # ==================== MAIN ====================
