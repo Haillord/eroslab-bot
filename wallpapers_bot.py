@@ -30,6 +30,7 @@ from parser_99px import fetch_99px
 
 # ==================== НАСТРОЙКИ ====================
 ENABLE_CIVITAI = False  # ✅ Поставь False чтобы отключить CivitAI полностью
+ENABLE_99PX = False     # ✅ Поставь False чтобы отключить 99px полностью
 
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN_WALLPAPERS", "")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID_WALLPAPERS", "")
@@ -556,24 +557,30 @@ def fetch_and_pick():
     preferred_orientation = get_preferred_orientation()
 
     # Чередование источников
-    last_source = content_state.get("last_source", "99px")
-    current_source = fetch_wallhaven if last_source == "99px" else fetch_99px
-    content_state["last_source"] = "wallhaven" if last_source == "99px" else "99px"
-    logger.info(f"Source this run: {current_source.__name__} (last was {last_source})")
+    if ENABLE_99PX:
+        last_source = content_state.get("last_source", "99px")
+        current_source = fetch_wallhaven if last_source == "99px" else fetch_99px
+        content_state["last_source"] = "wallhaven" if last_source == "99px" else "99px"
+        logger.info(f"Source this run: {current_source.__name__} (last was {last_source})")
 
-    try:
+        try:
+            items = current_source()
+        except Exception as e:
+            logger.warning(f"Primary source failed: {e}, trying fallback")
+            fallback = fetch_wallhaven if current_source == fetch_99px else fetch_99px
+            items = fallback()
+    else:
+        current_source = fetch_wallhaven
+        logger.info(f"Source this run: {current_source.__name__} (99px disabled)")
         items = current_source()
-    except Exception as e:
-        logger.warning(f"Primary source failed: {e}, trying fallback")
-        fallback = fetch_wallhaven if current_source == fetch_99px else fetch_99px
-        items = fallback()
     
     sources = []
     if ENABLE_CIVITAI:
         sources.append(fetch_civitai)
     sources.append(fetch_wallhaven)
     random.shuffle(sources)
-    sources.append(fetch_99px)
+    if ENABLE_99PX:
+        sources.append(fetch_99px)
     
     items = []
     for source in sources:
