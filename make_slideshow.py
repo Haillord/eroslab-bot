@@ -18,7 +18,7 @@ from io import BytesIO
 # ==================== НАСТРОЙКИ ====================
 OUTPUT_FILE = "slideshow.mp4"
 COUNT = 3             # сколько обоев взять
-DURATION_PER_IMAGE = 7  # секунд на каждый обой
+DURATION_PER_IMAGE = 6  # секунд на каждый обой
 TRANSITION_DURATION = 0.5  # секунд на переход
 WIDTH = 1080
 HEIGHT = 1080
