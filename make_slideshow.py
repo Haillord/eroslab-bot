@@ -61,11 +61,23 @@ def load_gist_state():
 
 def get_wallhaven_urls(ids: list, count: int) -> list:
     """Берёт последние N wallhaven ID и получает прямые URL картинок."""
-    wallhaven_ids = list(dict.fromkeys([
+    # Берём только wallhaven ID, СНАЧАЛА самые новые (в конце списка)
+    all_wallhaven_ids = [
         i.replace("wallhaven_", "")
         for i in reversed(ids)
         if i.startswith("wallhaven_")
-    ]))[:count]
+    ]
+    
+    # Удаляем дубликаты ОСТАВЛЯЯ ПЕРВОЕ ВХОЖДЕНИЕ (самое свежее)
+    seen = set()
+    wallhaven_ids = []
+    for wh_id in all_wallhaven_ids:
+        if wh_id not in seen:
+            seen.add(wh_id)
+            wallhaven_ids.append(wh_id)
+            
+    # Берём самые последние
+    wallhaven_ids = wallhaven_ids[:count]
 
     urls = []
     api_key = os.environ.get("WALLHAVEN_API_KEY", "")
