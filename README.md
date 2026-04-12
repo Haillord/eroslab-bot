@@ -86,34 +86,6 @@
 
 <br>
 
-
-```mermaid
-flowchart TD
-    A[⏰ GitHub Actions Cron] -->|каждые 120 минут| B[🎲 Ротация 50/50]
-    B --> C[🔥 CivitAI]
-    B --> D[🟧 Rule34]
-    C & D --> E[🔍 Фильтрация<br/></small>]
-    E --> F[🧠 AI Подпись<br/></small>]
-    F --> G[🖼️ Ватермарка<br/></small>]
-    G --> H[📢 Telegram<br/></small>]
-    H --> I[💾 Gist Storage<br/></small>]
-    
-    style A fill:#2088FF,color:white,stroke:none
-    style B fill:#1a1a1a,color:white,stroke:none
-    style C fill:#FF2244,color:white,stroke:none
-    style D fill:#FF6600,color:white,stroke:none
-    style E fill:#1a1a1a,color:white,stroke:none
-    style F fill:#00A67E,color:white,stroke:none
-    style G fill:#007808,color:white,stroke:none
-    style H fill:#2CA5E0,color:white,stroke:none
-    style I fill:#181717,color:white,stroke:none
-
-    linkStyle default stroke:#555,stroke-width:2px
-```
-
-<br>
-
-
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white"/>
   <img src="https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white"/>
