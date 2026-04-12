@@ -179,6 +179,24 @@ class BaseBot:
         
         save_all_state(self._state)
         logger.info("💾 Состояние сохранено в Gist")
+
+    def record_run_stats(self, metrics: dict):
+        """Записывает метрики запуска в stats"""
+        today = datetime.now(ZoneInfo(self.STATS_TZ)).strftime("%Y-%m-%d")
+        
+        if "runs" not in self.stats:
+            self.stats["runs"] = {}
+        
+        if today not in self.stats["runs"]:
+            self.stats["runs"][today] = {}
+        
+        for key, value in metrics.items():
+            if key in self.stats["runs"][today]:
+                self.stats["runs"][today][key] += value
+            else:
+                self.stats["runs"][today][key] = value
+        
+        logger.info(f"📈 Stats записаны: {metrics}")
     
     async def send_photo(self, photo_bytes: bytes, caption: str = "") -> bool:
         """Отправляет фото в канал"""
