@@ -81,35 +81,28 @@
 <br>
 
 
-```
-  GitHub Actions (cron)
-         │
-         ▼
-  ┌─────────────┐     50/50      ┌─────────────┐
-  │   CivitAI   │ ◄────────────► │   Rule34    │
-  └──────┬──────┘                └──────┬──────┘
-         │                              │
-         └──────────────┬───────────────┘
-                        ▼
-              ┌─────────────────┐
-              │  Фильтрация     │  тэги / хеш / размер / QoS
-              └────────┬────────┘
-                       ▼
-              ┌─────────────────┐
-              │  AI Caption     │  Groq / OpenRouter / Vision
-              └────────┬────────┘
-                       ▼
-              ┌─────────────────┐
-              │  Вотермарк      │  PIL + FFmpeg
-              └────────┬────────┘
-                       ▼
-              ┌─────────────────┐
-              │  Telegram       │  фото / видео / gif / пак
-              └────────┬────────┘
-                       ▼
-              ┌─────────────────┐
-              │  Gist Storage   │  сохраняем историю
-              └─────────────────┘
+```mermaid
+flowchart TD
+    A[⏰ GitHub Actions Cron] -->|каждые 15 мин| B{🎲 Ротация 50/50}
+    B --> C[🔥 CivitAI]
+    B --> D[🟧 Rule34]
+    C & D --> E[🔍 Фильтрация<br/><small>теги / хеш / размер / QoS</small>]
+    E --> F[🧠 AI Подпись<br/><small>Groq / OpenRouter / Vision</small>]
+    F --> G[🖼️ Вотермарк<br/><small>PIL + FFmpeg</small>]
+    G --> H[📢 Telegram<br/><small>фото / видео / gif / альбомы</small>]
+    H --> I[💾 Gist Storage<br/><small>история постов</small>]
+    
+    style A fill:#2088FF,color:white,stroke:none
+    style B fill:#1a1a1a,color:white,stroke:none
+    style C fill:#FF2244,color:white,stroke:none
+    style D fill:#FF6600,color:white,stroke:none
+    style E fill:#1a1a1a,color:white,stroke:none
+    style F fill:#00A67E,color:white,stroke:none
+    style G fill:#007808,color:white,stroke:none
+    style H fill:#2CA5E0,color:white,stroke:none
+    style I fill:#181717,color:white,stroke:none
+
+    linkStyle default stroke:#555,stroke-width:2px
 ```
 
 <br>
