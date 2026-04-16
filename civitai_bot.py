@@ -782,12 +782,25 @@ def _extract_civitai_likes(item):
     return max(numeric) if numeric else 0
 
 def fetch_civitai(max_pages: int = 5):
-    # Используем browsingLevel=31 для максимального охвата + nsfw=X для explicit.
-    # Newest проверяем первым для более быстрого нахождения свежего контента.
+    """Обновлённая версия с правильным фильтром NSFW"""
+    
     variations = [
-        {"browsingLevel": 31, "sort": "Newest"}, # Самое свежее, что залили только что
-        {"browsingLevel": 31, "sort": "Most Reactions", "period": "AllTime"}, # Самый сок за всё время
-        {"browsingLevel": 31, "sort": "Most Reactions", "period": "Month"}, # Тренды месяца
+        # 1. Самое свежее и самое жёсткое
+        {"sort": "Newest", "nsfwLevel": "X"},
+        {"sort": "Newest", "nsfwLevel": "Mature"},
+
+        # 2. Топ по реакциям за всё время (самый сочный контент)
+        {"sort": "Most Reactions", "period": "AllTime", "nsfwLevel": "X"},
+        {"sort": "Most Reactions", "period": "AllTime", "nsfwLevel": "Mature"},
+
+        # 3. Тренды месяца
+        {"sort": "Most Reactions", "period": "Month", "nsfwLevel": "X"},
+        {"sort": "Most Reactions", "period": "Month", "nsfwLevel": "Mature"},
+    ]
+
+    # Дополнительно можно добавить fallback с nsfw=true (на всякий случай)
+    fallback_variations = [
+        {"sort": "Most Reactions", "period": "AllTime", "nsfw": True},
     ]
 
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
