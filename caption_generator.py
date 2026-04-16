@@ -466,25 +466,18 @@ def _build_hook_line(style, content_type, safe_tags, width, height):
 
 
 def _assemble_caption(style, content_type, title_line, tech_block, body_text, style_block, hashtags, footer, safe_tags, width, height):
-    sections = [title_line]
-
-    hook = _build_hook_line(style, content_type, safe_tags, width, height)
-    if hook:
-        sections.append(hook)
+    sections = []
 
     if body_text:
         sections.append(body_text)
-    elif style_block:
-        sections.append(style_block)
+    else:
+        # Если нет AI подписи - оставляем пусто, никаких фоллбеков
+        pass
 
-    if tech_block:
-        sections.append(tech_block)
-
+    sections.append(footer)
+    
     if hashtags:
         sections.append(hashtags)
-
-    cta_line = random.choice(CTA_VARIANTS)
-    sections.append(f"{cta_line}\n{footer}")
 
     return "\n\n".join(s for s in sections if s)
 
@@ -871,41 +864,34 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
     - date: datetime or string format YYYY-MM-DD
     """
     safe_watermark = _escape_html(watermark)
-    clickable_suggestion = '<a href="https://t.me/Haillord">💬 Предложка</a>'
-    footer = f"{safe_watermark} · {clickable_suggestion}"
-
-    style = _pick_caption_style()
-    content_header = _build_title_line(content_type)
-
-    resolution, aspect_ratio = _format_resolution(width, height)
-    formatted_size = _format_file_size(file_size)
-    formatted_date = _format_date(date)
-
-    tech_lines = []
-    if resolution:
-        if aspect_ratio:
-            tech_lines.append(f"⚡ {resolution} · {aspect_ratio}")
-        else:
-            tech_lines.append(f"⚡ {resolution}")
-
-    if formatted_date:
-        tech_lines.append(f"📅 {formatted_date}")
-
-    tech_block = "\n".join(tech_lines) if tech_lines else ""
+    footer = safe_watermark
 
     safe_tags = _clean_caption_tags(_safe_tags(tags))
+    
+    # Пробуем получить AI описание
+    body_text = _generate_ai_body(
+        content_type=content_type,
+        rating=rating,
+        likes=likes,
+        safe_tags=safe_tags,
+        tech_block="",
+        image_data=image_data,
+        image_url=image_url,
+        secondary_image_data=secondary_image_data,
+        secondary_image_url=secondary_image_url,
+    )
+
     selected_hashtags = _select_hashtags_with_diversity(safe_tags, MAX_HASHTAGS)
     hashtags = " ".join(f"#{t}" for t in selected_hashtags) if selected_hashtags else ""
-    tags_block = _build_style_block(hashtags, content_type=content_type)
 
     caption = _assemble_caption(
-        style=style,
+        style="",
         content_type=content_type,
-        title_line=content_header,
-        tech_block=tech_block,
-        body_text="",
-        style_block=tags_block,
-        hashtags="",
+        title_line="",
+        tech_block="",
+        body_text=body_text,
+        style_block="",
+        hashtags=hashtags,
         footer=footer,
         safe_tags=safe_tags,
         width=width,
