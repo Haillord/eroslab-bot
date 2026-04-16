@@ -22,55 +22,11 @@ TAG_SETS = [
 
 # Разнообразные наборы тегов — выбираем случайный каждый раз
 TAG_SETS = [
-    # Базовые качественные 3D/анимация (самые рабочие в 2026)
-    "3d_(artwork) animated rating:explicit -2d",
-    "3d_(artwork) video rating:explicit -2d -hand_drawn",
-    "animated 3d_(artwork) rating:explicit",
-    "blender_(artwork) animated rating:explicit",
-    "source_filmmaker animated rating:explicit",
-    "koikatsu animated rating:explicit",
-    "unreal_engine animated rating:explicit",
-
-    # Смешанные высококачественные
-    "highres 3d_(artwork) animated rating:explicit",
-    "detailed_background 3d_(artwork) animated",
-    "physics animated 3d_(artwork) rating:explicit",
-    "sfm animated rating:explicit",
-    
-    # Для чистой анимации (не обязательно 3D)
-    "animated rating:explicit -static_image",
-    "gif rating:explicit -static_image",
-    "webm rating:explicit",
-]
-
-# Теги для ИИ-контента (AI generated) — обновлено под 2026
-AI_TAG_SETS = [
-    # Изображения
-    "ai_generated rating:explicit",
-    "stable_diffusion rating:explicit",
-    "novelai rating:explicit",
-    "pony_diffusion rating:explicit",
-    
-    # Анимированные AI (самое важное для видео)
-    "ai_generated animated rating:explicit",
-    "novelai animated rating:explicit",
-    "ai_animation rating:explicit",
-    "ai_generated 3d_(artwork) animated",
-    
-    # Новые популярные в 2026
-    "flux_(ai) animated rating:explicit",
-    "pony_diffusion animated rating:explicit",
-]
-
-# Теги для чистого 3D (с сильным исключением 2D и low-quality)
-THREE_D_TAG_SETS = [
-    "3d_(artwork) animated rating:explicit -2d -hand_drawn -drawn -sketch",
-    "3d_(artwork) video rating:explicit -2d",
-    "blender_(artwork) rating:explicit animated -2d",
-    "source_filmmaker rating:explicit animated -2d",
-    "unreal_engine 3d_(artwork) rating:explicit",
-    "koikatsu rating:explicit animated -2d",
-    "daz3d animated rating:explicit -2d",
+    "3d_(artwork) animated rating:explicit", # База 3D анимации
+    "ai_generated animated rating:explicit", # База ИИ видео
+    "ai_generated rating:explicit",          # Просто ИИ (картинки/сеты)
+    "3d_(artwork) rating:explicit",          # Просто 3D (статика)
+    "animated rating:explicit",             # Вообще любая анимация
 ]
 
 def fetch_rule34(tags: str = None, limit: int = 100, content_type: str = "mixed", media_type: str = "mixed") -> List[Dict[str, Any]]:

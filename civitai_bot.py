@@ -785,11 +785,9 @@ def fetch_civitai(max_pages: int = 5):
     # Используем browsingLevel=31 для максимального охвата + nsfw=X для explicit.
     # Newest проверяем первым для более быстрого нахождения свежего контента.
     variations = [
-        {"browsingLevel": 31, "sort": "Newest"},
-        {"browsingLevel": 31, "sort": "Newest", "period": "Week"},
-        {"browsingLevel": 31, "sort": "Most Reactions", "period": "Day"},
-        {"browsingLevel": 31, "sort": "Most Reactions", "period": "Week"},
-        {"browsingLevel": 31, "sort": "Most Reactions", "period": "Month"},
+        {"browsingLevel": 31, "sort": "Newest"}, # Самое свежее, что залили только что
+        {"browsingLevel": 31, "sort": "Most Reactions", "period": "AllTime"}, # Самый сок за всё время
+        {"browsingLevel": 31, "sort": "Most Reactions", "period": "Month"}, # Тренды месяца
     ]
 
     headers = {"Authorization": f"Bearer {CIVITAI_API_KEY}"} if CIVITAI_API_KEY else {}
