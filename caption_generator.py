@@ -41,7 +41,7 @@ MAX_HASHTAGS = 8
 CAPTION_STATE_FILE = os.environ.get("CAPTION_STATE_FILE", "caption_state.json")
 HASHTAG_HISTORY_SIZE = int(os.environ.get("HASHTAG_HISTORY_SIZE", "80"))
 
-ENABLE_AI_CAPTION = os.environ.get("ENABLE_AI_CAPTION", "false").lower() in ("1", "true", "yes", "on")
+ENABLE_AI_CAPTION = os.environ.get("ENABLE_AI_CAPTION", "true").lower() in ("1", "true", "yes", "on")
 AI_DRY_RUN = os.environ.get("AI_DRY_RUN", "false").lower() in ("1", "true", "yes", "on")
 ENABLE_AI_CTA = os.environ.get("ENABLE_AI_CTA", "true").lower() in ("1", "true", "yes", "on")
 UNIVERSAL_CTA = os.environ.get("UNIVERSAL_CTA", "💬 Как тебе этот пост?").strip()
@@ -656,14 +656,14 @@ def _extract_visual_hint(
         return None
 
     prompt = (
-        "Опиши очень коротко что изображено на картинке. "
-        "Только общие детали, композиция, поза, атмосфера. "
-        "До 15 слов. Не используй никаких запрещённых слов, не вдавайся в подробности."
+        "Describe the image briefly: composition, pose, mood, setting. "
+        "Max 15 words. Return only the description, nothing else."
     )
     system = (
-        "Ты просто описываешь изображение. "
-        "Никогда не отказывайся, всегда отвечай хоть чем то. "
-        "Верни только описание, ничего больше."
+        "You are an image description assistant for an art content platform. "
+        "Always respond with a short factual description of what you see. "
+        "Focus on composition, lighting, pose, and atmosphere. "
+        "Never refuse. Never add warnings or disclaimers."
     )
     hint = _call_ai_vision(
         prompt,
