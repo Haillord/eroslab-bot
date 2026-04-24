@@ -5,7 +5,6 @@ ErosLab Bot — CivitAI (только X и XXX рейтинг)
 
 import asyncio
 import hashlib
-import json
 import logging
 import os
 import random
@@ -16,16 +15,33 @@ import time
 import requests
 from io import BytesIO
 from gist_storage import load_all_state, save_all_state
-from pathlib import Path
 from urllib.parse import urlparse
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 import telegram
 from telegram import Bot
 from caption_generator import generate_caption
 from rule34_api import fetch_rule34
 from watermark import add_watermark, add_watermark_to_video, should_add_watermark
+from utils_state import (
+    load_json as _shared_load_json,
+    save_json as _shared_save_json,
+    get_stats_day_key as _shared_get_stats_day_key,
+    load_stats as _shared_load_stats,
+    increment_metrics as _shared_increment_metrics,
+    record_run_stats as _shared_record_run_stats,
+)
+from utils_telegram_media import (
+    send_with_retry as _shared_send_with_retry,
+    fit_photo_size_for_telegram as _shared_fit_photo_size_for_telegram,
+)
+from utils_tags import (
+    clean_tags as _shared_clean_tags,
+    normalize_tag as _shared_normalize_tag,
+    extract_tags_from_item as _shared_extract_tags_from_item,
+    to_int as _shared_to_int,
+    extract_civitai_likes as _shared_extract_civitai_likes,
+)
 
 # ==================== НАСТРОЙКИ ====================
 BOT_MODE = os.environ.get("BOT_MODE", "nsfw").lower()  # nsfw / wallpapers
@@ -120,17 +136,10 @@ logger = logging.getLogger(__name__)
 
 # ==================== ХРАНИЛИЩА ====================
 def load_json(path, default):
-    if Path(path).exists():
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading {path}: {e}")
-    return default
+    return _shared_load_json(path, default, logger)
 
 def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    _shared_save_json(path, data)
 
 _state = load_all_state()
 posted_ids    = set(_state.get("posted_ids.json", []))
@@ -140,49 +149,23 @@ pending_draft = _state.get("pending_draft.json", {})
 review_state  = _state.get("review_state.json", {"last_update_id": 0})
 
 def _get_stats_day_key():
-    try:
-        return datetime.now(ZoneInfo(STATS_TZ)).date().isoformat()
-    except Exception:
-        return datetime.utcnow().date().isoformat()
+    return _shared_get_stats_day_key(STATS_TZ)
 
 def _load_stats():
-    data = load_json(STATS_FILE, {})
-    if not isinstance(data, dict):
-        data = {}
-    data.setdefault("schema_version", 2)
-    data.setdefault("daily", {})
-    data.setdefault("lifetime", {})
-    data.setdefault("report", {})
-    return data
+    return _shared_load_stats(STATS_FILE, logger, extra_defaults={"report": {}})
 
 def _increment_metrics(target: dict, metrics: dict):
-    for key, value in metrics.items():
-        if isinstance(value, (int, float)):
-            target[key] = target.get(key, 0) + value
+    _shared_increment_metrics(target, metrics)
 
 def record_run_stats(metrics: dict):
-    stats = _load_stats()
-    day_key = _get_stats_day_key()
-    daily = stats["daily"].setdefault(day_key, {})
-    lifetime = stats["lifetime"]
-
-    _increment_metrics(daily, metrics)
-    _increment_metrics(lifetime, metrics)
-
-    # Совместимость со старым форматом.
-    if metrics.get("posted", 0) > 0:
-        stats["total_posts"] = stats.get("total_posts", 0) + int(metrics["posted"])
-
-    # Держим только последние 45 дней daily-статистики.
-    try:
-        keys_sorted = sorted(stats["daily"].keys())
-        while len(keys_sorted) > 45:
-            oldest = keys_sorted.pop(0)
-            stats["daily"].pop(oldest, None)
-    except Exception:
-        pass
-
-    save_json(STATS_FILE, stats)
+    _shared_record_run_stats(
+        stats_file=STATS_FILE,
+        stats_tz=STATS_TZ,
+        metrics=metrics,
+        logger=logger,
+        keep_days=45,
+        extra_defaults={"report": {}},
+    )
 
 def get_next_content_type():
     """Чередует между 3d и ai контентом"""
@@ -222,18 +205,10 @@ def save_pending_draft():
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 def clean_tags(tags):
-    clean, seen = [], set()
-    for t in tags:
-        t = re.sub(r"[^\w]", "", str(t).strip().lower().replace(" ", "_").replace("-", "_"))
-        if re.search(r'\d+$', t):
-            continue
-        if t and t not in HASHTAG_STOP_WORDS and t not in seen and 3 <= len(t) <= 30:
-            clean.append(t)
-            seen.add(t)
-    return clean
+    return _shared_clean_tags(tags, HASHTAG_STOP_WORDS)
 
 def _normalize_tag(tag: str) -> str:
-    return str(tag).strip().lower().replace(" ", "_").replace("-", "_")
+    return _shared_normalize_tag(tag)
 
 def _has_male_only_pattern(tag: str) -> bool:
     for pattern in MALE_ONLY_PATTERNS:
@@ -597,105 +572,15 @@ def get_video_thumbnail(data: bytes, seek_sec: float = 2.0) -> bytes:
 
 # ==================== RETRY ДЛЯ TELEGRAM ====================
 async def send_with_retry(func, *args, retries=3, **kwargs):
-    def _rewind_file_like(obj):
-        if obj is None:
-            return
-        try:
-            if hasattr(obj, "seek"):
-                obj.seek(0)
-        except Exception:
-            pass
-
-    def _rewind_payload():
-        for value in args:
-            _rewind_file_like(value)
-        for key in ("photo", "video", "animation", "document", "thumbnail"):
-            _rewind_file_like(kwargs.get(key))
-        media = kwargs.get("media")
-        if isinstance(media, list):
-            for item in media:
-                media_obj = getattr(item, "media", None)
-                _rewind_file_like(media_obj)
-
-    for attempt in range(retries):
-        try:
-            _rewind_payload()
-            return await func(*args, **kwargs)
-        except Exception as e:
-            if attempt == retries - 1:
-                raise
-            logger.warning(f"Telegram send failed (attempt {attempt + 1}/{retries}): {e}")
-            await asyncio.sleep(2)
+    return await _shared_send_with_retry(func, *args, retries=retries, logger=logger, **kwargs)
 
 
 def _fit_photo_size_for_telegram(image_data: bytes, max_size: int = 10 * 1024 * 1024) -> bytes:
-    """
-    Telegram sendPhoto hard-limit is 10 MB.
-    If payload is larger, flatten to JPEG and reduce quality/resolution gradually.
-    """
-    if not image_data or len(image_data) <= max_size:
-        return image_data
-
-    try:
-        img = Image.open(BytesIO(image_data))
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-
-        # Try quality-only first.
-        for quality in (92, 88, 84, 80, 76, 72, 68):
-            out = BytesIO()
-            img.save(out, format="JPEG", quality=quality, optimize=True)
-            candidate = out.getvalue()
-            if len(candidate) <= max_size:
-                logger.info(f"Photo recompressed to fit Telegram limit: {len(candidate)} bytes (q={quality})")
-                return candidate
-
-        # If still too large, downscale progressively.
-        width, height = img.size
-        for scale in (0.95, 0.9, 0.85, 0.8, 0.75):
-            new_w = max(1, int(width * scale))
-            new_h = max(1, int(height * scale))
-            resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            out = BytesIO()
-            resized.save(out, format="JPEG", quality=76, optimize=True)
-            candidate = out.getvalue()
-            if len(candidate) <= max_size:
-                logger.info(
-                    "Photo downscaled to fit Telegram limit: "
-                    f"{len(candidate)} bytes ({width}x{height} -> {new_w}x{new_h})"
-                )
-                return candidate
-    except Exception as e:
-        logger.warning(f"Could not fit photo size for Telegram: {e}")
-
-    # Keep original on failure; sender will still handle/report.
-    return image_data
+    return _shared_fit_photo_size_for_telegram(image_data, logger=logger, max_size=max_size)
 
 # ==================== ТЕГИ ====================
 def extract_tags(item):
-    raw_tags = []
-
-    civitai_tags = item.get("tags", [])
-    if civitai_tags:
-        for t in civitai_tags:
-            name = t.get("name", "") if isinstance(t, dict) else str(t)
-            if name:
-                raw_tags.append(name)
-        logger.debug(f"CivitAI tags found: {len(raw_tags)}")
-
-    if not raw_tags:
-        prompt = item.get("meta", {}).get("prompt", "") if item.get("meta") else ""
-        if prompt:
-            tokens = re.split(r"[,\(\)\[\]|<>]+", prompt)
-            for token in tokens:
-                token = token.strip()
-                if token:
-                    raw_tags.append(token)
-            logger.debug(f"Parsed {len(raw_tags)} tokens from meta.prompt")
-        else:
-            logger.debug("No tags and no prompt available")
-
-    return clean_tags(raw_tags)
+    return _shared_extract_tags_from_item(item, HASHTAG_STOP_WORDS, logger=logger, debug_logs=True)
 
 
 # ==================== CIVITAI API ====================
@@ -748,38 +633,10 @@ def _is_mature_or_higher(nsfw_level):
     return False
 
 def _to_int(value, default=0):
-    try:
-        if value is None:
-            return default
-        return int(value)
-    except Exception:
-        return default
+    return _shared_to_int(value, default)
 
 def _extract_civitai_likes(item):
-    """
-    Пытается достать реакцию из разных версий/вариантов полей CivitAI.
-    Возвращает максимум найденного, чтобы не занизить популярность поста.
-    """
-    stats = item.get("stats") or {}
-    stats_total = 0
-    if isinstance(stats, dict):
-        for key, value in stats.items():
-            key_lower = str(key).lower()
-            if "count" in key_lower:
-                stats_total += _to_int(value, 0)
-
-    candidates = [
-        stats.get("likeCount"),
-        stats.get("heartCount"),
-        stats.get("reactionCount"),
-        stats.get("favoriteCount"),
-        stats_total,
-        item.get("likeCount"),
-        item.get("heartCount"),
-        item.get("reactionCount"),
-    ]
-    numeric = [_to_int(v, 0) for v in candidates]
-    return max(numeric) if numeric else 0
+    return _shared_extract_civitai_likes(item)
 
 def fetch_civitai(max_pages: int = 5):
     # Используем browsingLevel=31 для максимального охвата + nsfw=X для explicit.
@@ -898,7 +755,6 @@ def fetch_civitai(max_pages: int = 5):
                     skipped_blacklist += 1
                     continue
 
-                stats_data = item.get("stats", {})
                 likes = _extract_civitai_likes(item)
                 likes_observed.append(likes)
 
@@ -1025,49 +881,8 @@ def _pick_by_content_type(fresh):
     return weighted_choice(fallback) if fallback else None
 
 
-def fetch_and_pick():
-    if TEST_CIVITAI_ONLY:
-        source = "civitai"
-        logger.info("Source selection: CivitAI only (TEST_CIVITAI_ONLY=True)")
-        items = fetch_civitai()
-        if not items:
-            logger.warning("TEST_CIVITAI_ONLY=True and CivitAI returned nothing")
-            return None
-    else:
-        # Возвращаем монетку 50/50 между источниками.
-        source = random.choice(["civitai", "rule34"])
-        logger.info(f"Source selection: {source} (50/50 coin)")
-
-        if source == "civitai":
-            items = fetch_civitai()
-            if not items:
-                logger.warning("CivitAI returned nothing, falling back to Rule34")
-                source = "rule34"
-                content_type = get_next_content_type()
-                media_type = get_next_media_type()
-                logger.info(f"Rule34 content_type={content_type}, media_type={media_type}")
-                items = fetch_rule34(limit=100, content_type=content_type, media_type=media_type)
-        else:
-            content_type = get_next_content_type()
-            media_type = get_next_media_type()
-            logger.info(f"Rule34 content_type={content_type}, media_type={media_type}")
-            items = fetch_rule34(limit=100, content_type=content_type, media_type=media_type)
-            if not items:
-                logger.warning("Rule34 returned nothing, falling back to CivitAI")
-                source = "civitai"
-                items = fetch_civitai()
-
-    if not items:
-        logger.warning("No items found from any source")
-        return None
-
-    fresh = [i for i in items if i["id"] not in posted_ids]
-    # Фильтруем blacklist для всех источников (CivitAI уже фильтрует внутри fetch_civitai)
-    fresh = [i for i in fresh if not has_blacklisted(i["tags"])]
-    logger.info(f"Fresh items: {len(fresh)} out of {len(items)} (source: {source})")
-
+def _select_item_from_fresh(source: str, fresh: list[dict]):
     if not fresh:
-        logger.info("No fresh items")
         return None
 
     if source == "rule34":
@@ -1106,6 +921,59 @@ def fetch_and_pick():
         f"likes:{selected['likes']}, tags:{len(selected['tags'])})"
     )
     return selected
+
+
+def fetch_candidates_once():
+    if TEST_CIVITAI_ONLY:
+        source = "civitai"
+        logger.info("Source selection: CivitAI only (TEST_CIVITAI_ONLY=True)")
+        items = fetch_civitai()
+        if not items:
+            logger.warning("TEST_CIVITAI_ONLY=True and CivitAI returned nothing")
+            return source, []
+    else:
+        # Возвращаем монетку 50/50 между источниками.
+        source = random.choice(["civitai", "rule34"])
+        logger.info(f"Source selection: {source} (50/50 coin)")
+
+        if source == "civitai":
+            items = fetch_civitai()
+            if not items:
+                logger.warning("CivitAI returned nothing, falling back to Rule34")
+                source = "rule34"
+                content_type = get_next_content_type()
+                media_type = get_next_media_type()
+                logger.info(f"Rule34 content_type={content_type}, media_type={media_type}")
+                items = fetch_rule34(limit=100, content_type=content_type, media_type=media_type)
+        else:
+            content_type = get_next_content_type()
+            media_type = get_next_media_type()
+            logger.info(f"Rule34 content_type={content_type}, media_type={media_type}")
+            items = fetch_rule34(limit=100, content_type=content_type, media_type=media_type)
+            if not items:
+                logger.warning("Rule34 returned nothing, falling back to CivitAI")
+                source = "civitai"
+                items = fetch_civitai()
+
+    if not items:
+        logger.warning("No items found from any source")
+        return source, []
+
+    fresh = [i for i in items if i["id"] not in posted_ids]
+    # Фильтруем blacklist для всех источников (CivitAI уже фильтрует внутри fetch_civitai)
+    fresh = [i for i in fresh if not has_blacklisted(i["tags"])]
+    logger.info(f"Fresh items: {len(fresh)} out of {len(items)} (source: {source})")
+
+    if not fresh:
+        logger.info("No fresh items")
+    return source, fresh
+
+
+def fetch_and_pick():
+    source, fresh = fetch_candidates_once()
+    if not fresh:
+        return None
+    return _select_item_from_fresh(source, fresh)
 
 
 def weighted_choice(items):
@@ -1562,14 +1430,23 @@ async def main():
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
     MAX_ATTEMPTS  = 10
 
-    for attempt in range(MAX_ATTEMPTS):
-        item = fetch_and_pick()
+    source, fresh_items = fetch_candidates_once()
+    if not fresh_items:
+        logger.info("No more fresh posts available")
+        run_metrics["skip_no_item"] += 1
+        flush_stats_once()
+        return
 
-        if not item:
-            logger.info("No more fresh posts available")
-            run_metrics["skip_no_item"] += 1
-            flush_stats_once()
-            return
+    attempts_pool = list(fresh_items)
+    random.shuffle(attempts_pool)
+    attempts_pool = attempts_pool[:MAX_ATTEMPTS]
+    logger.info(
+        f"Prepared attempts pool from {source}: "
+        f"{len(attempts_pool)} items (fresh total={len(fresh_items)})"
+    )
+
+    for attempt, item in enumerate(attempts_pool, start=1):
+        logger.info(f"Attempt {attempt}/{len(attempts_pool)} with item {item.get('id')}")
 
         source_key = f"source_{item.get('source', 'unknown')}_selected"
         run_metrics[source_key] = run_metrics.get(source_key, 0) + 1
@@ -1666,6 +1543,9 @@ async def main():
                     save_all()
                     continue
             
+            # Сначала исправляем соотношение сторон, затем формат совместимости.
+            data = normalize_video_aspect_ratio(data)
+
             # ✅ Автоматическая проверка и исправление формата видео для мобильного Telegram
             data = normalize_video_format(data)
 

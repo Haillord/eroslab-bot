@@ -5,50 +5,49 @@ ErosLab Wallpapers Bot — Только красивые безопасные о
 
 import asyncio
 import hashlib
-import json
 import logging
 import os
 import random
-import re
-import subprocess
-import tempfile
 import time
 import requests
 from io import BytesIO
 from gist_storage import load_all_state, save_all_state
-from pathlib import Path
-from urllib.parse import urlparse
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from PIL import Image
-import telegram
 from telegram import Bot
 from caption_generator import generate_wallpaper_caption
-from watermark import should_add_watermark
-from parser_99px import fetch_99px
+from utils_state import (
+    load_json as _shared_load_json,
+    save_json as _shared_save_json,
+    get_stats_day_key as _shared_get_stats_day_key,
+    load_stats as _shared_load_stats,
+    increment_metrics as _shared_increment_metrics,
+    record_run_stats as _shared_record_run_stats,
+)
+from utils_telegram_media import (
+    send_with_retry as _shared_send_with_retry,
+    fit_photo_size_for_telegram as _shared_fit_photo_size_for_telegram,
+)
+from utils_tags import (
+    clean_tags as _shared_clean_tags,
+    normalize_tag as _shared_normalize_tag,
+    extract_tags_from_item as _shared_extract_tags_from_item,
+    to_int as _shared_to_int,
+    extract_civitai_likes as _shared_extract_civitai_likes,
+)
 
 
 # ==================== НАСТРОЙКИ ====================
 ENABLE_CIVITAI = False  # ✅ Поставь False чтобы отключить CivitAI полностью
-ENABLE_99PX = False     # ✅ Поставь False чтобы отключить 99px полностью
 
 TELEGRAM_BOT_TOKEN  = os.environ.get("TELEGRAM_BOT_TOKEN_WALLPAPERS", "")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID_WALLPAPERS", "")
-ADMIN_USER_ID = str(os.environ.get("ADMIN_USER_ID", "")).strip()
 CIVITAI_API_KEY     = os.environ.get("CIVITAI_API_KEY", "")
 WALLHAVEN_API_KEY   = os.environ.get("WALLHAVEN_API_KEY", "")
 
-WATERMARK_ENABLED = False
 MIN_LIKES        = 5
 MIN_IMAGE_SIZE   = 720
 MIN_ASPECT_RATIO_MIN = 0.5   # 9:16 вертикальные (телефон)
 MIN_ASPECT_RATIO_MAX = 2.0   # 16:9 горизонтальные (монитор)
-IMAGE_PACK_SIZE = 4
-IMAGE_PACK_CANDIDATE_POOL = 24
-
-HISTORY_FILE = "posted_ids_wallpapers.json"
-HASHES_FILE  = "posted_hashes_wallpapers.json"
-CONTENT_STATE_FILE = "content_state_wallpapers.json"
 STATS_FILE = "stats_wallpapers.json"
 MAX_HISTORY_SIZE = 5000
 STATS_TZ = os.environ.get("STATS_TZ", "Europe/Moscow")
@@ -79,17 +78,10 @@ logger = logging.getLogger(__name__)
 
 # ==================== ХРАНИЛИЩА ====================
 def load_json(path, default):
-    if Path(path).exists():
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading {path}: {e}")
-    return default
+    return _shared_load_json(path, default, logger)
 
 def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    _shared_save_json(path, data)
 
 _state = load_all_state()
 posted_ids    = set(_state.get("posted_ids_wallpapers.json", []))
@@ -98,46 +90,22 @@ content_state = _state.get("content_state_wallpapers.json", {"last_type": "lands
 
 
 def _get_stats_day_key():
-    try:
-        return datetime.now(ZoneInfo(STATS_TZ)).date().isoformat()
-    except Exception:
-        return datetime.utcnow().date().isoformat()
+    return _shared_get_stats_day_key(STATS_TZ)
 
 def _load_stats():
-    data = load_json(STATS_FILE, {})
-    if not isinstance(data, dict):
-        data = {}
-    data.setdefault("schema_version", 2)
-    data.setdefault("daily", {})
-    data.setdefault("lifetime", {})
-    return data
+    return _shared_load_stats(STATS_FILE, logger)
 
 def _increment_metrics(target: dict, metrics: dict):
-    for key, value in metrics.items():
-        if isinstance(value, (int, float)):
-            target[key] = target.get(key, 0) + value
+    _shared_increment_metrics(target, metrics)
 
 def record_run_stats(metrics: dict):
-    stats = _load_stats()
-    day_key = _get_stats_day_key()
-    daily = stats["daily"].setdefault(day_key, {})
-    lifetime = stats["lifetime"]
-
-    _increment_metrics(daily, metrics)
-    _increment_metrics(lifetime, metrics)
-
-    if metrics.get("posted", 0) > 0:
-        stats["total_posts"] = stats.get("total_posts", 0) + int(metrics["posted"])
-
-    try:
-        keys_sorted = sorted(stats["daily"].keys())
-        while len(keys_sorted) > 45:
-            oldest = keys_sorted.pop(0)
-            stats["daily"].pop(oldest, None)
-    except Exception:
-        pass
-
-    save_json(STATS_FILE, stats)
+    _shared_record_run_stats(
+        stats_file=STATS_FILE,
+        stats_tz=STATS_TZ,
+        metrics=metrics,
+        logger=logger,
+        keep_days=45,
+    )
 
 def save_all():
     trimmed_ids    = list(posted_ids)[-MAX_HISTORY_SIZE:]
@@ -152,18 +120,10 @@ def save_all():
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 def clean_tags(tags):
-    clean, seen = [], set()
-    for t in tags:
-        t = re.sub(r"[^\w]", "", str(t).strip().lower().replace(" ", "_").replace("-", "_"))
-        if re.search(r'\d+$', t):
-            continue
-        if t and t not in HASHTAG_STOP_WORDS and t not in seen and 3 <= len(t) <= 30:
-            clean.append(t)
-            seen.add(t)
-    return clean
+    return _shared_clean_tags(tags, HASHTAG_STOP_WORDS)
 
 def _normalize_tag(tag: str) -> str:
-    return str(tag).strip().lower().replace(" ", "_").replace("-", "_")
+    return _shared_normalize_tag(tag)
 
 def has_blacklisted(tags):
     normalized_tags = [_normalize_tag(t) for t in tags]
@@ -212,94 +172,16 @@ def compute_image_hash(data: bytes) -> str:
 
 # ==================== RETRY ДЛЯ TELEGRAM ====================
 async def send_with_retry(func, *args, retries=3, **kwargs):
-    def _rewind_file_like(obj):
-        if obj is None:
-            return
-        try:
-            if hasattr(obj, "seek"):
-                obj.seek(0)
-        except Exception:
-            pass
-
-    def _rewind_payload():
-        for value in args:
-            _rewind_file_like(value)
-        for key in ("photo", "media"):
-            _rewind_file_like(kwargs.get(key))
-        media = kwargs.get("media")
-        if isinstance(media, list):
-            for item in media:
-                media_obj = getattr(item, "media", None)
-                _rewind_file_like(media_obj)
-
-    for attempt in range(retries):
-        try:
-            _rewind_payload()
-            return await func(*args, **kwargs)
-        except Exception as e:
-            if "invalid_dimensions" in str(e).lower():
-                raise  # не ретраим, сразу пробрасываем
-            if attempt == retries - 1:
-                raise
-            logger.warning(f"Telegram send failed (attempt {attempt + 1}/{retries}): {e}")
-            await asyncio.sleep(2)
+    return await _shared_send_with_retry(func, *args, retries=retries, logger=logger, **kwargs)
 
 
 def _fit_photo_size_for_telegram(image_data: bytes, max_size: int = 10 * 1024 * 1024) -> bytes:
-    if not image_data or len(image_data) <= max_size:
-        return image_data
-
-    try:
-        img = Image.open(BytesIO(image_data))
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-
-        for quality in (92, 88, 84, 80, 76, 72, 68):
-            out = BytesIO()
-            img.save(out, format="JPEG", quality=quality, optimize=True)
-            candidate = out.getvalue()
-            if len(candidate) <= max_size:
-                logger.info(f"Photo recompressed: {len(candidate)} bytes (q={quality})")
-                return candidate
-
-        width, height = img.size
-        for scale in (0.95, 0.9, 0.85, 0.8, 0.75):
-            new_w = max(1, int(width * scale))
-            new_h = max(1, int(height * scale))
-            resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            out = BytesIO()
-            resized.save(out, format="JPEG", quality=76, optimize=True)
-            candidate = out.getvalue()
-            if len(candidate) <= max_size:
-                logger.info(f"Photo downscaled: {len(candidate)} bytes ({width}x{height} -> {new_w}x{new_h})")
-                return candidate
-    except Exception as e:
-        logger.warning(f"Could not fit photo size: {e}")
-
-    return image_data
+    return _shared_fit_photo_size_for_telegram(image_data, logger=logger, max_size=max_size)
 
 
 # ==================== ТЕГИ ====================
 def extract_tags(item):
-    raw_tags = []
-
-    civitai_tags = item.get("tags", [])
-    if civitai_tags:
-        for t in civitai_tags:
-            name = t.get("name", "") if isinstance(t, dict) else str(t)
-            if name:
-                raw_tags.append(name)
-
-    if not raw_tags:
-        prompt = item.get("meta", {}).get("prompt", "") if item.get("meta") else ""
-        if prompt:
-            tokens = re.split(r"[,\(\)\[\]|<>]+", prompt)
-            for token in tokens:
-                token = token.strip()
-                if token:
-                    raw_tags.append(token)
-
-    return clean_tags(raw_tags)
+    return _shared_extract_tags_from_item(item, HASHTAG_STOP_WORDS)
 
 
 # ==================== CIVITAI API ====================
@@ -333,35 +215,11 @@ def _request_with_backoff(url, params, headers, max_retries=3):
 
 
 def _to_int(value, default=0):
-    try:
-        if value is None:
-            return default
-        return int(value)
-    except Exception:
-        return default
+    return _shared_to_int(value, default)
 
 
 def _extract_civitai_likes(item):
-    stats = item.get("stats") or {}
-    stats_total = 0
-    if isinstance(stats, dict):
-        for key, value in stats.items():
-            key_lower = str(key).lower()
-            if "count" in key_lower:
-                stats_total += _to_int(value, 0)
-
-    candidates = [
-        stats.get("likeCount"),
-        stats.get("heartCount"),
-        stats.get("reactionCount"),
-        stats.get("favoriteCount"),
-        stats_total,
-        item.get("likeCount"),
-        item.get("heartCount"),
-        item.get("reactionCount"),
-    ]
-    numeric = [_to_int(v, 0) for v in candidates]
-    return max(numeric) if numeric else 0
+    return _shared_extract_civitai_likes(item)
 
 
 def fetch_wallhaven(max_pages: int = 3):
@@ -413,8 +271,7 @@ def fetch_wallhaven(max_pages: int = 3):
                     break
 
             except Exception as e:
-                logger.warning(f"Skip candidate {candidate['id']}: {e}")
-                posted_ids.add(candidate['id'])
+                logger.warning(f"Wallhaven page {page} failed: {e}")
                 continue
 
         if all_items:
@@ -555,32 +412,12 @@ def fetch_civitai(max_pages: int = 5):
 
 def fetch_and_pick():
     preferred_orientation = get_preferred_orientation()
-
-    # Чередование источников
-    if ENABLE_99PX:
-        last_source = content_state.get("last_source", "99px")
-        current_source = fetch_wallhaven if last_source == "99px" else fetch_99px
-        content_state["last_source"] = "wallhaven" if last_source == "99px" else "99px"
-        logger.info(f"Source this run: {current_source.__name__} (last was {last_source})")
-
-        try:
-            items = current_source()
-        except Exception as e:
-            logger.warning(f"Primary source failed: {e}, trying fallback")
-            fallback = fetch_wallhaven if current_source == fetch_99px else fetch_99px
-            items = fallback()
-    else:
-        current_source = fetch_wallhaven
-        logger.info(f"Source this run: {current_source.__name__} (99px disabled)")
-        items = current_source()
     
     sources = []
     if ENABLE_CIVITAI:
         sources.append(fetch_civitai)
     sources.append(fetch_wallhaven)
     random.shuffle(sources)
-    if ENABLE_99PX:
-        sources.append(fetch_99px)
     
     items = []
     for source in sources:
@@ -637,22 +474,23 @@ def fetch_and_pick():
                         continue
 
                 logger.info(f"Found: {candidate['id']} (likes:{candidate['likes']}, tag:{candidate.get('tag_source')})")
-                return candidate, img_hash
+                return candidate, img_hash, image_data
 
             except Exception as e:
                 logger.warning(f"Skip candidate {candidate['id']}: {e}")
                 posted_ids.add(candidate['id'])
                 continue
-        return None, None
+        return None, None, None
 
-    result, img_hash = _try_pick(fresh_photos, strict_orientation=preferred_orientation)
+    result, img_hash, image_data = _try_pick(fresh_photos, strict_orientation=preferred_orientation)
 
     if result is None:
         logger.info(f"No {preferred_orientation} found, trying any orientation")
-        result, img_hash = _try_pick(fresh_photos, strict_orientation=None)
+        result, img_hash, image_data = _try_pick(fresh_photos, strict_orientation=None)
 
     if result:
         result["_img_hash"] = img_hash
+        result["_image_data"] = image_data
 
     return result
 
@@ -660,9 +498,11 @@ def fetch_and_pick():
 # ==================== ПУБЛИКАЦИЯ ====================
 async def publish_item_to_channel(bot: Bot, item: dict):
     try:
-        r = requests.get(item.get("url"), timeout=60)
-        r.raise_for_status()
-        image_data = r.content
+        image_data = item.get("_image_data")
+        if image_data is None:
+            r = requests.get(item.get("url"), timeout=60)
+            r.raise_for_status()
+            image_data = r.content
 
         # Ресайз если изображение слишком большое по пикселям
         img = Image.open(BytesIO(image_data))

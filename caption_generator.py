@@ -87,6 +87,24 @@ VISION_MODELS = [
 
 # ==================== WALLPAPER CAPTION ====================
 
+WALLPAPER_TITLES = (
+    "✦ WALLPAPER OF THE DAY ✦",
+    "✦ FRESH WALLPAPER DROP ✦",
+    "✦ NEW WALLPAPER PICK ✦",
+)
+
+TITLE_VARIANTS_AI = (
+    "✦ AI HIGHLIGHT ✦",
+    "✦ AI SCENE OF THE DAY ✦",
+    "✦ AI VISUAL DROP ✦",
+)
+
+TITLE_VARIANTS_3D = (
+    "✦ 3D HIGHLIGHT ✦",
+    "✦ 3D SCENE OF THE DAY ✦",
+    "✦ 3D VISUAL DROP ✦",
+)
+
 # Эмодзи по тематике тегов
 WALLPAPER_TAG_EMOJI = {
     "landscape":   "🌄",
@@ -172,10 +190,6 @@ def generate_wallpaper_caption(
         if selected_tags else ""
     )
 
-    # Строка хештегов
-    all_hashtags = _select_hashtags_with_diversity(safe_tags, MAX_HASHTAGS)
-    hashtags_line = " ".join(f"#{t}" for t in all_hashtags) if all_hashtags else ""
-
     # Разрешение и соотношение сторон
     resolution, aspect_ratio = _format_resolution(width, height)
     res_line = ""
@@ -209,7 +223,7 @@ def generate_wallpaper_caption(
 
     # Футер
     safe_watermark = _escape_html(watermark)
-    clickable = '<a href="https://t.me/Haillord">💬 Предложи обои</a>'
+    clickable = _escape_html(str(suggestion or "💬 Предложи обои"))
     footer = f"{clickable} · {safe_watermark}"
 
     # Собираем итоговый пост
@@ -581,22 +595,18 @@ def _call_ai_vision(
     if not ENABLE_AI_VISION or not OPENROUTER_API_KEY:
         return None
 
-    primary_url = image_url
-
-    if not primary_url and image_data:
-        primary_url = _build_image_data_url(image_data)
-
-    if not primary_url:
-        return None
-
-    if image_data:
+    def _prepare_image_url(raw_data=None, raw_url=None):
+        prepared_url = raw_url
+        if not prepared_url and raw_data:
+            prepared_url = _build_image_data_url(raw_data)
+        if not prepared_url or not raw_data:
+            return prepared_url
         try:
             from io import BytesIO
             from PIL import Image
 
-            img = Image.open(BytesIO(image_data))
+            img = Image.open(BytesIO(raw_data))
             w, h = img.size
-
             if w > 1024 or h > 1024:
                 ratio = min(1024 / w, 1024 / h)
                 img = img.resize((int(w * ratio), int(h * ratio)), Image.Resampling.LANCZOS)
@@ -604,14 +614,24 @@ def _call_ai_vision(
                 img.save(out, format="JPEG", quality=85)
                 resized_url = _build_image_data_url(out.getvalue())
                 if resized_url:
-                    primary_url = resized_url
+                    prepared_url = resized_url
         except Exception:
             pass
+        return prepared_url
+
+    primary_url = _prepare_image_url(raw_data=image_data, raw_url=image_url)
+
+    if not primary_url:
+        return None
+
+    secondary_url = _prepare_image_url(raw_data=secondary_image_data, raw_url=secondary_image_url)
 
     user_content = [
         {"type": "text", "text": prompt},
         {"type": "image_url", "image_url": {"url": primary_url}},
     ]
+    if secondary_url:
+        user_content.append({"type": "image_url", "image_url": {"url": secondary_url}})
 
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
@@ -619,36 +639,41 @@ def _call_ai_vision(
         "Content-Type": "application/json",
     }
 
-    for model_name in VISION_MODELS:
-        try:
-            payload = {
-                "model": model_name,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-            }
+    model_candidates = [model] if model else list(VISION_MODELS)
+    for model_name in model_candidates:
+        for attempt in range(max(1, retries)):
+            try:
+                payload = {
+                    "model": model_name,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                }
 
-            resp = requests.post(url, headers=headers, json=payload, timeout=AI_TIMEOUT_SEC)
+                resp = requests.post(url, headers=headers, json=payload, timeout=AI_TIMEOUT_SEC)
 
-            if resp.status_code == 404:
-                logger.debug(f"Vision model not found, skipping: {model_name}")
+                if resp.status_code == 404:
+                    logger.debug(f"Vision model not found, skipping: {model_name}")
+                    break
+
+                resp.raise_for_status()
+                data = resp.json()
+                result = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                result = str(result).strip()
+
+                if result:
+                    logger.info(f"Vision used model: {model_name}")
+                    return result
+                break
+            except Exception as e:
+                if attempt == max(1, retries) - 1:
+                    logger.debug(f"Vision model {model_name} failed: {e}")
+                else:
+                    time.sleep(0.5)
                 continue
-
-            resp.raise_for_status()
-            data = resp.json()
-            result = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            result = str(result).strip()
-
-            if result:
-                logger.info(f"Vision used model: {model_name}")
-                return result
-
-        except Exception as e:
-            logger.debug(f"Vision model {model_name} failed: {e}")
-            continue
 
     logger.warning("All vision models failed")
     return None
@@ -776,7 +801,7 @@ def _generate_ai_body(
     bad_phrases = [
         "от айи", "от ии", "нейросеть", "ai ", "3д девушка", "просто огонь", 
         "честно говоря", "заходит", "норм", "акцент на", "атмосфера", "подача",
-        "композиция", "детализация", "высокое качество", "красивая" "в 3д", "эта тёлка в 3д", "3д тёлка", "3д девушка", "3д модель"
+        "композиция", "детализация", "высокое качество", "красивая", "в 3д", "эта тёлка в 3д", "3д тёлка", "3д девушка", "3д модель"
     ]
     for phrase in bad_phrases:
         if phrase in result.lower():

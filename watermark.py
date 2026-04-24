@@ -10,6 +10,16 @@ import io
 logger = logging.getLogger(__name__)
 
 
+def _escape_ffmpeg_drawtext_text(value: str) -> str:
+    # Escape characters significant for ffmpeg drawtext parser.
+    text = str(value or "")
+    text = text.replace("\\", "\\\\")
+    text = text.replace(":", r"\:")
+    text = text.replace("'", r"\'")
+    text = text.replace("%", r"\%")
+    return text
+
+
 def add_watermark(image_data: bytes, text: str = "@eroslabai",
                   opacity: float = 0.3, font_size_ratio: float = 0.04) -> bytes:
     """
@@ -135,11 +145,11 @@ def add_watermark_to_video(video_data: bytes, text: str = "@eroslabai",
 
         font_size = max(20, int(height * font_size_ratio))
         margin = 20
-        alpha = int(opacity * 255)
 
         # Фильтр для наложения текста
+        safe_text = _escape_ffmpeg_drawtext_text(text)
         drawtext_filter = (
-            f"drawtext=text='{text}':"
+            f"drawtext=text='{safe_text}':"
             f"fontcolor=white@{opacity:.2f}:"
             f"fontsize={font_size}:"
             f"x=w-tw-{margin}:"

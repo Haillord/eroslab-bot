@@ -13,15 +13,6 @@ logger = logging.getLogger("ErosLab.Rule34")
 
 # Разнообразные наборы тегов — выбираем случайный каждый раз
 TAG_SETS = [
-    "3d_(artwork) animated rating:explicit", # База 3D анимации
-    "ai_generated animated rating:explicit", # База ИИ видео
-    "ai_generated rating:explicit",          # Просто ИИ (картинки/сеты)
-    "3d_(artwork) rating:explicit",          # Просто 3D (статика)
-    "animated rating:explicit"               # Вообще любая анимация
-]
-
-# Разнообразные наборы тегов — выбираем случайный каждый раз
-TAG_SETS = [
     # Базовые качественные 3D/анимация (самые рабочие в 2026)
     "3d_(artwork) animated rating:explicit",
     "3d_(artwork) video rating:explicit",
@@ -94,8 +85,10 @@ def fetch_rule34(tags: str = None, limit: int = 100, content_type: str = "mixed"
     logger.info(f"Rule34: starting from random page {start_page}, scanning next {max_pages} pages")
     
     # Rule34 API: pid=0 — первая страница, pid=1 — вторая, и т.д.
+    pages_scanned = 0
     for page_offset in range(0, max_pages):
         page = start_page + page_offset
+        pages_scanned += 1
         params = {
             "page": "dapi",
             "s": "post",
@@ -136,7 +129,10 @@ def fetch_rule34(tags: str = None, limit: int = 100, content_type: str = "mixed"
                     continue
 
                 # Фильтруем по минимальному score (Rule34 score ниже чем CivitAI likes)
-                score = int(post.get("score", 0))
+                try:
+                    score = int(post.get("score", 0))
+                except (TypeError, ValueError):
+                    score = 0
                 if score < RULE34_MIN_SCORE:
                     continue
 
@@ -154,7 +150,7 @@ def fetch_rule34(tags: str = None, limit: int = 100, content_type: str = "mixed"
 
             # Если набрали достаточно постов — останавливаемся
             if len(all_results) >= min_posts:
-                logger.info(f"Rule34: collected {len(all_results)} posts from {page} pages")
+                logger.info(f"Rule34: collected {len(all_results)} posts from {pages_scanned} scanned pages")
                 break
 
         except Exception as e:

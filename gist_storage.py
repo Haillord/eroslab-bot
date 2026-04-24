@@ -16,6 +16,19 @@ GIST_HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
+LOCAL_STATE_FILES = {
+    "posted_ids.json",
+    "posted_hashes.json",
+    "content_state.json",
+    "pending_draft.json",
+    "review_state.json",
+    "stats.json",
+    "posted_ids_wallpapers.json",
+    "posted_hashes_wallpapers.json",
+    "content_state_wallpapers.json",
+    "stats_wallpapers.json",
+}
+
 
 def load_all_state() -> Dict[str, Any]:
     """
@@ -79,13 +92,14 @@ def save_all_state(state: Dict[str, Any]) -> bool:
 def _load_from_local_files() -> Dict[str, Any]:
     """Загрузка из локальных файлов (fallback)"""
     state = {}
-    for file in os.listdir("."):
-        if file.endswith(".json"):
-            try:
-                with open(file, "r", encoding="utf-8") as f:
-                    state[file] = json.load(f)
-            except:
-                pass
+    for file in LOCAL_STATE_FILES:
+        if not os.path.exists(file):
+            continue
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                state[file] = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
     return state
 
 
