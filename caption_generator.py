@@ -77,10 +77,13 @@ FRAME_EMOJI_3D = ("🔥", "🎯", "🧨")
 
 # Список vision-моделей: фоллбек от лучшей к запасной
 VISION_MODELS = [
-    "google/gemma-4-31b-it:free",       # ✅ актуальная, апрель 2026
+    "google/gemma-4-31b-it:free",      # ✅ актуальная, апрель 2026
     "google/gemma-4-26b-a4b-it:free",   # ✅ актуальная
-    "nvidia/nemotron-nano-2-vl-8b:free",  # правильный ID
-    "qwen/qwen2.5-vl-7b-instruct:free",   # добавь
+    "moonshotai/kimi-vl-a3b-thinking:free",  # правильный ID
+    "google/gemma-3-27b-it:free",
+    "google/gemma-3-12b-it:free",
+    "google/gemma-3-4b-it:free", 
+    "nvidia/nemotron-nano-2-vl-8b:free",# добавь
 ]
 
 # ==================== WALLPAPER CAPTION ====================
