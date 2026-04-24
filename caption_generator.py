@@ -41,7 +41,7 @@ MAX_HASHTAGS = 8
 CAPTION_STATE_FILE = os.environ.get("CAPTION_STATE_FILE", "caption_state.json")
 HASHTAG_HISTORY_SIZE = int(os.environ.get("HASHTAG_HISTORY_SIZE", "80"))
 
-ENABLE_AI_CAPTION = os.environ.get("ENABLE_AI_CAPTION", "true").lower() in ("1", "true", "yes", "on")
+ENABLE_AI_CAPTION = os.environ.get("ENABLE_AI_CAPTION", "false").lower() in ("1", "true", "yes", "on")
 AI_DRY_RUN = os.environ.get("AI_DRY_RUN", "false").lower() in ("1", "true", "yes", "on")
 ENABLE_AI_CTA = os.environ.get("ENABLE_AI_CTA", "true").lower() in ("1", "true", "yes", "on")
 UNIVERSAL_CTA = os.environ.get("UNIVERSAL_CTA", "💬 Как тебе этот пост?").strip()
