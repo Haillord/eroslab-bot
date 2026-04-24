@@ -604,6 +604,14 @@ def _request_with_backoff(url, params, headers, max_retries=3):
                 logger.warning(f"Rate limited (429), waiting {wait}s before retry {attempt + 1}/{max_retries}")
                 time.sleep(wait)
                 continue
+            if r.status_code == 500:
+                # CivitAI может быть нестабилен: не тратим время на длинные ретраи.
+                wait = 2 + attempt * 2  # 2, 4, 6
+                logger.warning(f"Server error 500, retry {attempt + 1}/{max_retries}")
+                if attempt >= max_retries - 1:
+                    return None
+                time.sleep(wait)
+                continue
             if r.status_code == 400:
                 return r
             r.raise_for_status()
@@ -682,7 +690,12 @@ def fetch_civitai(max_pages: int = 5):
                 )
                 if r is None:
                     logger.warning(f"CivitAI page {page}: no response")
-                    continue
+                    # Быстрый фоллбек: если даже первую страницу не удалось получить,
+                    # считаем источник временно недоступным и выходим сразу.
+                    if page == 1:
+                        logger.warning("CivitAI unavailable on first page, skipping source for this run")
+                        return []
+                    break
 
                 # Handle 400 Bad Request
                 if r.status_code == 400:
