@@ -700,6 +700,12 @@ def _generate_ai_body(
     if not ENABLE_AI_CAPTION:
         return None
 
+    # Проверяем теги ДО любых API вызовов
+    content_tags = [t for t in safe_tags if len(t) > 3]
+    if len(content_tags) < 3:
+        logger.info(f"AI body skipped: too few content tags ({len(content_tags)})")
+        return None
+
     visual_hint = _extract_visual_hint(
         content_type,
         image_data=image_data,
@@ -725,13 +731,13 @@ def _generate_ai_body(
     prompt_parts = [
         "Напиши подпись для этого поста.",
         f"Тип контента: {content_type}",
-        f"Темы: {', '.join(safe_tags[:7]) if safe_tags else 'разное'}",
+        f"Темы: {', '.join(content_tags[:7]) if content_tags else 'разное'}",
     ]
 
     if visual_hint:
         prompt_parts.append(f"По картинке: {visual_hint}")
 
-    prompt_parts.append(f"Длина: строго 1-2 предложения, не больше 25 слов суммарно. Только текст.")
+    prompt_parts.append("Длина: строго 1-2 предложения, не больше 25 слов. Только текст.")
 
     final_prompt = "\n".join(prompt_parts)
 
@@ -748,19 +754,19 @@ def _generate_ai_body(
 
     result = result.strip().replace("\n", " ")
 
-    if len(safe_tags) <= 2:
-        return None
-
     bad_phrases = [
-        "от айи", "от ии", "нейросеть", "ai ", "3д девушка", "просто огонь", 
-        "честно говоря", "заходит", "норм", "акцент на", "атмосфера", "подача",
-        "композиция", "детализация", "высокое качество", "красивая", "в 3д", "эта тёлка в 3д", "3д тёлка", "3д девушка", "3д модель"
+        "от айи", "от ии", "нейросеть", "ai ", "3д девушка",
+        "честно говоря", "заходит", "норм", "акцент на", "атмосфера",
+        "подача", "композиция", "детализация", "высокое качество",
+        "в 3д", "3д тёлка", "3д модель",
     ]
     for phrase in bad_phrases:
         if phrase in result.lower():
+            logger.info(f"AI body rejected: bad phrase '{phrase}'")
             return None
 
     if len(result) < 45 or _word_count(result) < 7:
+        logger.info(f"AI body rejected: too short ({len(result)} chars)")
         return None
 
     if len(result) > AI_BODY_MAX_CHARS:
