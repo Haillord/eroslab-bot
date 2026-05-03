@@ -291,6 +291,23 @@ def _is_safe_rating(nsfw_level):
     return False
 
 
+def fetch_wallhaven_tags(wallpaper_id: str) -> list:
+    raw_id = wallpaper_id.replace("wallhaven_", "")
+    try:
+        r = requests.get(
+            f"https://wallhaven.cc/api/v1/w/{raw_id}",
+            params={"apikey": WALLHAVEN_API_KEY},
+            timeout=10
+        )
+        data = r.json()
+        tags = [t["name"] for t in data.get("data", {}).get("tags", [])[:10]]
+        logger.info(f"Fetched tags for {wallpaper_id}: {tags}")
+        return tags
+    except Exception as e:
+        logger.warning(f"Failed to fetch tags for {wallpaper_id}: {e}")
+        return []
+
+
 def fetch_civitai(max_pages: int = 5):
     variations = [
         # Приоритет: сначала свежее за неделю
@@ -474,6 +491,10 @@ def fetch_and_pick():
                         continue
                     if strict_orientation == "landscape" and is_portrait:
                         continue
+
+                # Догружаем теги если источник wallhaven и теги пустые
+                if candidate.get("source") == "wallhaven" and not candidate.get("tags"):
+                    candidate["tags"] = fetch_wallhaven_tags(candidate["id"])
 
                 logger.info(f"Found: {candidate['id']} (likes:{candidate['likes']}, tag:{candidate.get('tag_source')})")
                 return candidate, img_hash, image_data
