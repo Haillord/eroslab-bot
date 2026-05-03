@@ -845,12 +845,16 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
 
     # Добавляем expandable промпт если есть
     if prompt_hint:
-        prompt_block = _build_expandable_block(prompt_hint)
-        # Вставляем перед footer (последней строкой)
-        parts = caption.rsplit("\n\n", 1)
-        if len(parts) == 2:
-            caption = parts[0] + "\n\n" + prompt_block + "\n\n" + parts[1]
-        else:
-            caption = caption + "\n\n" + prompt_block
+        MAX_CAPTION = 1024
+        label_overhead = len("\n\n<blockquote expandable>🧬 <b>GEN PROMPT</b>\n\n</blockquote>")
+        available = MAX_CAPTION - len(caption) - label_overhead
+        if available > 30:
+            prompt_hint = prompt_hint[:available]
+            prompt_block = _build_expandable_block(prompt_hint)
+            parts = caption.rsplit("\n\n", 1)
+            if len(parts) == 2:
+                caption = parts[0] + "\n\n" + prompt_block + "\n\n" + parts[1]
+            else:
+                caption = caption + "\n\n" + prompt_block
 
     return caption
