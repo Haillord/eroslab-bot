@@ -718,7 +718,7 @@ def fetch_civitai(max_pages: int = 5):
 
                 is_allowed_nsfw = _is_x_or_xxx(nsfw_level)
                 if not is_allowed_nsfw and _is_mature_or_higher(nsfw_level):
-                  if random.random() > NSFW_RATIO:
+                  if random.random() < 0.5:  # 50% шанс принять Mature
                     is_allowed_nsfw = True
                     accepted_mature += 1
 
