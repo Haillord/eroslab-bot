@@ -596,16 +596,16 @@ def _extract_civitai_prompt(item: dict) -> str | None:
     ).strip()
     if not prompt or len(prompt) < 20:
         return None
+
     prompt = re.sub(r'<[^>]+>', '', prompt)
     prompt = re.sub(
         r'\b(score_\d+[\w_]*|masterpiece|best quality|highres|absurdres'
-        r'|ultra[\w ]*|extremely detailed|step\d+|cfg\s*\d+)\b',
+        r'|ultra[\w ]*|extremely detailed|step\d+|cfg\s*\d+|BREAK)\b',
         '', prompt, flags=re.IGNORECASE
     )
     prompt = re.sub(r',\s*,', ',', prompt)
     prompt = re.sub(r'\s+', ' ', prompt).strip(", ")
-    if len(prompt) > 300:
-        prompt = prompt[:300].rsplit(",", 1)[0].strip() + "..."
+
     return prompt or None
 
 def fetch_civitai(max_pages: int = 5):
