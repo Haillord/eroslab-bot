@@ -378,11 +378,11 @@ def _build_style_block(body_text, content_type=None):
     return f"<blockquote>{prefix} {_escape_html(text)}</blockquote>"
 
 
-def _build_expandable_block(text: str, label: str = "🔍 Промпт") -> str:
+def _build_expandable_block(text: str, label: str = "🧬 <b>GEN PROMPT</b>") -> str:
     if not text:
         return ""
     escaped = _escape_html(text)
-    return f"<blockquote expandable>{label}\n{escaped}</blockquote>"
+    return f"<blockquote expandable>{label}\n\n{escaped}</blockquote>"
 
 
 def _pick_caption_style():
