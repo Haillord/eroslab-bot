@@ -254,6 +254,8 @@ def fetch_wallhaven(max_pages: int = 3):
                     break
 
                 for item in items:
+                    tags = [t["name"] for t in item.get("tags", [])[:10]]
+                    logger.info(f"Item {item['id']} tags raw: {item.get('tags', [])} → parsed: {tags}")
                     all_items.append({
                         "id":      f"wallhaven_{item['id']}",
                         "url":     item["path"],
