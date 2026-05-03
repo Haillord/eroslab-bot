@@ -186,8 +186,9 @@ def generate_wallpaper_caption(
 
     # Строка тегов вида: fantasy • landscape • mountain
     tag_emoji = _pick_wallpaper_emoji(selected_tags or safe_tags)
+    hashtag_str = " ".join(f"#{t.replace(' ', '_')}" for t in selected_tags)
     tags_line = (
-        f"{tag_emoji} {' • '.join(selected_tags)}"
+        f"{tag_emoji} {hashtag_str}"
         if selected_tags else ""
     )
 
@@ -204,23 +205,16 @@ def generate_wallpaper_caption(
     if likes and likes > 0:
         likes_line = f"❤️ {likes:,} реакций"
 
-    # Собираем содержимое blockquote
-    bq_parts = []
-    if tags_line:
-        bq_parts.append(tags_line)
-    if res_line or likes_line:
-        # Пустая строка между тегами и техническими данными
-        if tags_line:
-            bq_parts.append("")
-        if res_line:
-            bq_parts.append(res_line)
-        if likes_line:
-            bq_parts.append(likes_line)
+    # Отдельный блок для тегов
+    tags_block = f"<blockquote>{tags_line}</blockquote>" if tags_line else ""
 
-    blockquote = (
-        f"<blockquote>{chr(10).join(bq_parts)}</blockquote>"
-        if bq_parts else ""
-    )
+    # Отдельный блок для технической информации
+    tech_parts = []
+    if res_line:
+        tech_parts.append(res_line)
+    if likes_line:
+        tech_parts.append(likes_line)
+    tech_block = f"<blockquote>{chr(10).join(tech_parts)}</blockquote>" if tech_parts else ""
 
     # Футер
     safe_watermark = _escape_html(watermark)
@@ -229,8 +223,10 @@ def generate_wallpaper_caption(
 
     # Собираем итоговый пост
     parts = [title]
-    if blockquote:
-        parts.append(blockquote)
+    if tags_block:
+        parts.append(tags_block)
+    if tech_block:
+        parts.append(tech_block)
 
     # Кросс промо между каналами с вероятностью ~20%
     if random.random() < 0.2:
