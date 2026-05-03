@@ -799,21 +799,13 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      watermark="📣 @eroslabai", suggestion="💬 Предложка: @Haillord",
                      content_type="ai", width=None, height=None,
                      file_size=None, date=None, prompt_hint=None):
-    """
-    Builds caption with technical details.
 
-    Params:
-    - width, height: image/video dimensions in pixels
-    - file_size: bytes
-    - date: datetime or string format YYYY-MM-DD
-    """
     safe_watermark = _escape_html(watermark)
     clickable_suggestion = '<a href="https://t.me/Haillord">💬 Предложка</a>'
     footer = f"{safe_watermark} · {clickable_suggestion}"
 
     safe_tags = _clean_caption_tags(_safe_tags(tags))
     
-    # Пробуем получить AI описание
     body_text = _generate_ai_body(
         content_type=content_type,
         rating=rating,
@@ -843,14 +835,25 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
         height=height,
     )
 
-    # Добавляем expandable промпт если есть
+    # ← всё ниже внутри функции с отступом 4 пробела
     if prompt_hint:
         prompt_block = _build_expandable_block(prompt_hint)
-        # Вставляем перед footer (последней строкой)
         parts = caption.rsplit("\n\n", 1)
-        if len(parts) == 2:
-            caption = parts[0] + "\n\n" + prompt_block + "\n\n" + parts[1]
-        else:
-            caption = caption + "\n\n" + prompt_block
 
-    return caption
+        if len(parts) == 2:
+            new_caption = parts[0] + "\n\n" + prompt_block + "\n\n" + parts[1]
+        else:
+            new_caption = caption + "\n\n" + prompt_block
+
+        if len(new_caption) <= 1024:
+            caption = new_caption
+        else:
+            max_prompt_len = 1024 - len(caption) - 20
+            if max_prompt_len > 50:
+                truncated = prompt_hint[:max_prompt_len].rsplit(",", 1)[0] + "..."
+                prompt_block = _build_expandable_block(truncated)
+                parts = caption.rsplit("\n\n", 1)
+                if len(parts) == 2:
+                    caption = parts[0] + "\n\n" + prompt_block + "\n\n" + parts[1]
+
+    return caption  # ← тоже внутри функции
