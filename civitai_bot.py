@@ -1670,8 +1670,6 @@ async def main():
         prompt_hint=item.get("prompt"),
     )
 
-    if use_image_pack:
-        caption += f"\n\n📦 Пак: {len(image_pack)} фото"
 
     logger.info(f"Tags for caption ({len(caption_tags)}): {caption_tags[:8]}")
     logger.info(f"Caption preview: {caption[:100]}")
