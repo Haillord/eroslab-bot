@@ -794,18 +794,50 @@ def _generate_ai_body(
 
 
 
+def _inject_prompt_block(caption: str, prompt_hint: str) -> str:
+    """Вставляет expandable блок промпта перед footer, соблюдая лимит 1024 символа."""
+    if not prompt_hint:
+        return caption
+
+    MAX_CAPTION = 1024
+    label_overhead = len("\n\n<blockquote expandable>🧬 <b>GEN PROMPT</b>\n\n</blockquote>\n\n")
+
+    def _insert(cap: str, block: str) -> str:
+        parts = cap.rsplit("\n\n", 1)
+        if len(parts) == 2:
+            return parts[0] + "\n\n" + block + "\n\n" + parts[1]
+        return cap + "\n\n" + block
+
+    # Пробуем вставить полный промпт
+    full_block = _build_expandable_block(prompt_hint)
+    candidate = _insert(caption, full_block)
+    if len(candidate) <= MAX_CAPTION:
+        return candidate
+
+    # Не влезает — обрезаем по последней запятой
+    available = MAX_CAPTION - len(caption) - label_overhead
+    if available <= 30:
+        logger.info(f"Prompt skipped: not enough space ({available} chars available)")
+        return caption
+
+    truncated = prompt_hint[:available].rsplit(",", 1)[0].strip() + "..."
+    truncated_block = _build_expandable_block(truncated)
+    return _insert(caption, truncated_block)
+
+
 def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      secondary_image_data=None, secondary_image_url=None,
                      watermark="📣 @eroslabai", suggestion="💬 Предложка: @Haillord",
                      content_type="ai", width=None, height=None,
                      file_size=None, date=None, prompt_hint=None):
+    """Builds caption with hashtags, AI body and optional prompt block."""
 
     safe_watermark = _escape_html(watermark)
     clickable_suggestion = '<a href="https://t.me/Haillord">💬 Предложка</a>'
     footer = f"{safe_watermark} · {clickable_suggestion}"
 
     safe_tags = _clean_caption_tags(_safe_tags(tags))
-    
+
     body_text = _generate_ai_body(
         content_type=content_type,
         rating=rating,
@@ -835,25 +867,4 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
         height=height,
     )
 
-    # ← всё ниже внутри функции с отступом 4 пробела
-    if prompt_hint:
-        prompt_block = _build_expandable_block(prompt_hint)
-        parts = caption.rsplit("\n\n", 1)
-
-        if len(parts) == 2:
-            new_caption = parts[0] + "\n\n" + prompt_block + "\n\n" + parts[1]
-        else:
-            new_caption = caption + "\n\n" + prompt_block
-
-        if len(new_caption) <= 1024:
-            caption = new_caption
-        else:
-            max_prompt_len = 1024 - len(caption) - 20
-            if max_prompt_len > 50:
-                truncated = prompt_hint[:max_prompt_len].rsplit(",", 1)[0] + "..."
-                prompt_block = _build_expandable_block(truncated)
-                parts = caption.rsplit("\n\n", 1)
-                if len(parts) == 2:
-                    caption = parts[0] + "\n\n" + prompt_block + "\n\n" + parts[1]
-
-    return caption  # ← тоже внутри функции
+    return _inject_prompt_block(caption, prompt_hint)
