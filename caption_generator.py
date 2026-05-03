@@ -41,7 +41,7 @@ MAX_HASHTAGS = 8
 CAPTION_STATE_FILE = os.environ.get("CAPTION_STATE_FILE", "caption_state.json")
 HASHTAG_HISTORY_SIZE = int(os.environ.get("HASHTAG_HISTORY_SIZE", "80"))
 
-ENABLE_AI_CAPTION = os.environ.get("ENABLE_AI_CAPTION", "true").lower() in ("1", "true", "yes", "on")
+ENABLE_AI_CAPTION = os.environ.get("ENABLE_AI_CAPTION", "false").lower() in ("1", "true", "yes", "on")
 AI_DRY_RUN = os.environ.get("AI_DRY_RUN", "false").lower() in ("1", "true", "yes", "on")
 ENABLE_AI_CTA = os.environ.get("ENABLE_AI_CTA", "true").lower() in ("1", "true", "yes", "on")
 UNIVERSAL_CTA = os.environ.get("UNIVERSAL_CTA", "💬 Как тебе этот пост?").strip()
@@ -376,6 +376,13 @@ def _build_style_block(body_text, content_type=None):
 
     prefix = _pick_frame_emoji(content_type) if content_type else "✨"
     return f"<blockquote>{prefix} {_escape_html(text)}</blockquote>"
+
+
+def _build_expandable_block(text: str, label: str = "🔍 Промпт") -> str:
+    if not text:
+        return ""
+    escaped = _escape_html(text)
+    return f"<blockquote expandable>{label}\n{escaped}</blockquote>"
 
 
 def _pick_caption_style():
@@ -791,7 +798,7 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
                      secondary_image_data=None, secondary_image_url=None,
                      watermark="📣 @eroslabai", suggestion="💬 Предложка: @Haillord",
                      content_type="ai", width=None, height=None,
-                     file_size=None, date=None):
+                     file_size=None, date=None, prompt_hint=None):
     """
     Builds caption with technical details.
 
@@ -835,5 +842,15 @@ def generate_caption(tags, rating, likes, image_data=None, image_url=None,
         width=width,
         height=height,
     )
+
+    # Добавляем expandable промпт если есть
+    if prompt_hint:
+        prompt_block = _build_expandable_block(prompt_hint)
+        # Вставляем перед footer (последней строкой)
+        parts = caption.rsplit("\n\n", 1)
+        if len(parts) == 2:
+            caption = parts[0] + "\n\n" + prompt_block + "\n\n" + parts[1]
+        else:
+            caption = caption + "\n\n" + prompt_block
 
     return caption

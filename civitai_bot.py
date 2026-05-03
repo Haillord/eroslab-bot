@@ -587,6 +587,27 @@ def _to_int(value, default=0):
 def _extract_civitai_likes(item):
     return _shared_extract_civitai_likes(item)
 
+def _extract_civitai_prompt(item: dict) -> str | None:
+    meta = item.get("meta")
+    if not isinstance(meta, dict):
+        return None
+    prompt = (
+        meta.get("prompt") or meta.get("Prompt") or meta.get("positive") or ""
+    ).strip()
+    if not prompt or len(prompt) < 20:
+        return None
+    prompt = re.sub(r'<[^>]+>', '', prompt)
+    prompt = re.sub(
+        r'\b(score_\d+[\w_]*|masterpiece|best quality|highres|absurdres'
+        r'|ultra[\w ]*|extremely detailed|step\d+|cfg\s*\d+)\b',
+        '', prompt, flags=re.IGNORECASE
+    )
+    prompt = re.sub(r',\s*,', ',', prompt)
+    prompt = re.sub(r'\s+', ' ', prompt).strip(", ")
+    if len(prompt) > 300:
+        prompt = prompt[:300].rsplit(",", 1)[0].strip() + "..."
+    return prompt or None
+
 def fetch_civitai(max_pages: int = 5):
     # Используем browsingLevel=31 для максимального охвата + nsfw=X для explicit.
     # Newest проверяем первым для более быстрого нахождения свежего контента.
@@ -726,6 +747,7 @@ def fetch_civitai(max_pages: int = 5):
                     "mime":    (item.get("mimeType") or "").lower(),
                     "createdAt": item.get("createdAt"),
                     "source":  "civitai",
+                    "prompt":  _extract_civitai_prompt(item),
                 })
 
             except Exception as e:
@@ -1644,7 +1666,8 @@ async def main():
         width=caption_width,
         height=caption_height,
         file_size=caption_file_size,
-        date=caption_date
+        date=caption_date,
+        prompt_hint=item.get("prompt"),
     )
 
     if use_image_pack:
