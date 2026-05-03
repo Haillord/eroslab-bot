@@ -910,9 +910,9 @@ def fetch_candidates_once():
             logger.warning("TEST_CIVITAI_ONLY=True and CivitAI returned nothing")
             return source, []
     else:
-        # Возвращаем монетку 50/50 между источниками.
-        source = random.choice(["civitai", "rule34"])
-        logger.info(f"Source selection: {source} (50/50 coin)")
+        # Возвращаем монетку 70/30 между источниками.
+        source = random.choices(["civitai", "rule34"], weights=[70, 30], k=1)[0]
+        logger.info(f"Source selection: {source} (70/30 civitai/rule34)")
 
         if source == "civitai":
             items = fetch_civitai()
