@@ -67,6 +67,7 @@ IMAGE_PACK_SIZE = max(1, int(os.environ.get("IMAGE_PACK_SIZE", "3")))
 IMAGE_PACK_CANDIDATE_POOL = max(IMAGE_PACK_SIZE, int(os.environ.get("IMAGE_PACK_CANDIDATE_POOL", "18")))
 # True: отправлять пак отдельными постами, False: одним media_group
 IMAGE_PACK_SPLIT_POSTS = os.environ.get("IMAGE_PACK_SPLIT_POSTS", "false").lower() in ("1", "true", "yes", "on")
+NSFW_RATIO = float(os.environ.get("NSFW_RATIO", "0.6"))  # 60% XXX, 40% Mature
 
 # Временно отключить Rule34 (True = только CivitAI для тестов)
 TEST_CIVITAI_ONLY = False
@@ -716,7 +717,8 @@ def fetch_civitai(max_pages: int = 5):
                 nsfw_distribution[nsfw_key] = nsfw_distribution.get(nsfw_key, 0) + 1
 
                 is_allowed_nsfw = _is_x_or_xxx(nsfw_level)
-                if not is_allowed_nsfw and ALLOW_MATURE_FALLBACK and _is_mature_or_higher(nsfw_level):
+                if not is_allowed_nsfw and _is_mature_or_higher(nsfw_level):
+                  if random.random() > NSFW_RATIO:
                     is_allowed_nsfw = True
                     accepted_mature += 1
 
