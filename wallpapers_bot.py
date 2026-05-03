@@ -236,7 +236,7 @@ def fetch_wallhaven(max_pages: int = 3):
             params = {
                 "apikey": WALLHAVEN_API_KEY,
                 "categories": "111",
-                "purity": "100",
+                "purity": "110",
                 "atleast": "1920x1080",
                 "page": page,
                 **base_params
