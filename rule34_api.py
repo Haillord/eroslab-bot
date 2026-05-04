@@ -30,6 +30,8 @@ AI_TAG_SETS = [
     
     # Анимированные AI (самое важное для видео)
     "ai_generated animated rating:explicit",
+    "ai_generated webm rating:explicit",
+    "ai_generated video rating:explicit",
 ]
 
 # Теги для чистого 3D (с сильным исключением 2D и low-quality)

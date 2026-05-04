@@ -190,7 +190,7 @@ def get_next_content_type():
 def get_next_media_type():
     """Строгое распределение: 70% video, 30% image."""
     global content_state
-    media_type = "video" if random.random() < 0.7 else "image"
+    media_type = "video" if random.random() < 0.85 else "image"
     content_state["last_media"] = media_type
     save_json(CONTENT_STATE_FILE, content_state)
     return media_type
@@ -839,7 +839,7 @@ def _collect_pack_candidates(seed_item: dict, limit: int) -> list[dict]:
 
 def _pick_by_content_type(fresh):
     """70/30 видео или фото. Если нужного типа нет — берём что есть."""
-    content_type = "video" if random.random() < 0.7 else "image"
+    content_type = "video" if random.random() < 0.85 else "image"
     logger.info(f"Content type selection: {content_type}")
 
     if content_type == 'video':
@@ -866,7 +866,7 @@ def _select_item_from_fresh(source: str, fresh: list[dict]):
     if source == "rule34":
         selected = _pick_by_content_type(fresh)
     else:
-        content_type = "video" if random.random() < 0.7 else "image"
+        content_type = "video" if random.random() < 0.85 else "image"
         logger.info(f"Content type selection (civitai): {content_type}")
 
         if content_type == 'image':
@@ -911,7 +911,7 @@ def fetch_candidates_once():
             return source, []
     else:
         # Возвращаем монетку 70/30 между источниками.
-        source = random.choices(["civitai", "rule34"], weights=[70, 30], k=1)[0]
+        source = random.choices(["civitai", "rule34"], weights=[50, 50], k=1)[0]
         logger.info(f"Source selection: {source} (70/30 civitai/rule34)")
 
         if source == "civitai":
