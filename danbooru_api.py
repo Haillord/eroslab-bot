@@ -21,10 +21,8 @@ BASE_URL = "https://danbooru.donmai.us"
 # Наборы тегов — чередуем случайным образом.
 # Authenticated аккаунт поддерживает до 6 тегов одновременно.
 TAG_SETS = [
-    "ai-generated rating:explicit order:rank",
-    "ai-generated rating:explicit order:score",
-    "rating:explicit -loli order:rank",
-    "rating:explicit -loli order:score",
+    "ai-generated rating:explicit",
+    "rating:explicit order:rank",
 ]
 
 DANBOORU_BLACKLIST = {
