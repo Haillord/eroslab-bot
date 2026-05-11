@@ -22,20 +22,12 @@ BASE_URL = "https://gelbooru.com/index.php"
 # Наборы тегов — чередуем случайным образом
 # Gelbooru не ограничивает кол-во тегов (в отличие от Danbooru без подписки)
 TAG_SETS = [
-    # AI-generated explicit, без male-only
-    "ai_generated rating:explicit -loli -shota -1boy -solo_male -yaoi sort:score:desc",
-    "ai_generated rating:explicit -loli -shota -1boy -solo_male -yaoi sort:updated:desc",
-
-    # Анимированный AI
-    "ai_generated animated rating:explicit -loli -shota -1boy -solo_male sort:score:desc",
-    "ai_generated webm rating:explicit -loli -shota -1boy -solo_male sort:score:desc",
-
-    # 3D artwork explicit
-    "3d_(artwork) rating:explicit -loli -shota -1boy -solo_male -yaoi sort:score:desc",
-    "3d_(artwork) animated rating:explicit -loli -shota -1boy -solo_male sort:score:desc",
-
-    # Смешанный топ
-    "rating:explicit -loli -shota -1boy -solo_male -yaoi -gore sort:score:desc",
+    "ai_generated rating:explicit score:>=5 -loli -shota -1boy -solo_male -yaoi sort:score:desc",
+    "ai_generated animated rating:explicit score:>=5 -loli -shota -1boy -solo_male sort:score:desc",
+    "ai_generated webm rating:explicit score:>=5 -loli -shota -1boy -solo_male sort:score:desc",
+    "3d_(artwork) rating:explicit score:>=5 -loli -shota -1boy -solo_male -yaoi sort:score:desc",
+    "3d_(artwork) animated rating:explicit score:>=5 -loli -shota -1boy -solo_male sort:score:desc",
+    "rating:explicit score:>=10 -loli -shota -1boy -solo_male -yaoi -gore sort:score:desc",
 ]
 
 GELBOORU_BLACKLIST = {
@@ -113,7 +105,7 @@ def fetch_gelbooru(limit: int = 100, max_pages: int = 5) -> List[Dict[str, Any]]
     all_results: List[Dict[str, Any]] = []
     seen_ids: set = set()
     # pid у Gelbooru = номер страницы (0-based)
-    start_pid = random.randint(0, 20)
+    start_pid = random.randint(0, 5)
 
     for page_offset in range(max_pages):
         pid = start_pid + page_offset
